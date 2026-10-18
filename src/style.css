@@ -1,0 +1,447 @@
+:root {
+  --bg: #12101a;
+  --panel: #1c1930;
+  --panel-2: #262140;
+  --ink: #e8e4f5;
+  --ink-dim: #9a93b8;
+  --line: #3a3358;
+  --accent: #c9a24a;
+  --danger: #c4524f;
+  --good: #4f9d7a;
+  --radius: 10px;
+
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, 'Pretendard', 'Noto Sans KR', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: radial-gradient(ellipse at 50% 0%, #1d1830 0%, var(--bg) 60%);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+#app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: calc(100dvh - 32px);
+}
+
+.screen--center {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.title {
+  font-size: clamp(28px, 7vw, 44px);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.heading {
+  font-size: 20px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.subtitle {
+  color: var(--ink-dim);
+  margin: 0;
+}
+
+/* ── 버튼 공통 ───────────────────────────── */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: #332c52;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1b1608;
+  font-weight: 600;
+}
+
+.btn--primary:hover {
+  background: #d9b35c;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* ── 선택 카드(캐릭터/모닥불) ──────────────── */
+
+.pick-row,
+.node-row,
+.reward-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  text-align: left;
+  width: min(260px, 100%);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pick:hover {
+  border-color: var(--accent);
+}
+
+.pick__name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.pick__hp,
+.pick__tagline {
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+/* ── 맵 ──────────────────────────────────── */
+
+.run-header {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-size: 14px;
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(220px, 100%);
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.node:hover {
+  border-color: var(--accent);
+}
+
+.node__kind {
+  font-weight: 600;
+  font-size: 17px;
+}
+
+.node__detail {
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+.node--elite .node__kind {
+  color: var(--danger);
+}
+.node--boss .node__kind {
+  color: var(--accent);
+}
+.node--rest .node__kind {
+  color: var(--good);
+}
+
+/* ── 전투 ────────────────────────────────── */
+
+.screen--combat {
+  gap: 12px;
+}
+
+.enemies {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  min-height: 120px;
+  align-items: flex-start;
+  padding: 12px 0;
+}
+
+.enemy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 180px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
+
+.enemies--targeting .enemy:not(:disabled) {
+  border-color: var(--danger);
+  cursor: crosshair;
+}
+
+.enemy--dead {
+  opacity: 0.4;
+}
+
+.enemy__name {
+  font-weight: 600;
+}
+
+.enemy__intent {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.hp {
+  position: relative;
+  height: 20px;
+  border-radius: 4px;
+  background: #0e0c16;
+  overflow: hidden;
+}
+
+.hp__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7a3b3b, #b05151);
+  transition: width 0.18s ease;
+}
+
+.hp__text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statuses {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.player-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.player-bar .hp {
+  flex: 1;
+}
+
+.energy {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* ── 손패 ────────────────────────────────── */
+
+.hand {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 128px;
+  min-height: 150px;
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+
+.card--selected {
+  border-color: var(--accent);
+  transform: translateY(-8px);
+}
+
+.card--unaffordable {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.card--unaffordable:hover {
+  transform: none;
+}
+
+.card--attack {
+  border-left: 3px solid var(--danger);
+}
+.card--skill {
+  border-left: 3px solid #5570b0;
+}
+.card--power {
+  border-left: 3px solid var(--accent);
+}
+
+.card__cost {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.card__name {
+  font-weight: 600;
+  padding-right: 18px;
+}
+
+.card__text {
+  font-size: 12px;
+  color: var(--ink-dim);
+  line-height: 1.4;
+}
+
+.piles {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.piles__turn {
+  margin-left: auto;
+}
+
+.log {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-dim);
+  min-height: 1.4em;
+}
+
+/* ── 덱 목록 ─────────────────────────────── */
+
+.deck {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  background: var(--panel);
+}
+
+.deck summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: 14px;
+}
+
+.deck__list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.deck-item {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.deck-item:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.deck-item span {
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+/* ── 좁은 화면 ───────────────────────────── */
+
+@media (max-width: 560px) {
+  .card {
+    width: calc(50% - 4px);
+    min-height: 120px;
+  }
+  .enemy {
+    width: calc(50% - 6px);
+  }
+}
