@@ -49,8 +49,8 @@ export function render(game: GameState, ui: UiState): string {
 function titleScreen(): string {
   return `
     <section class="screen screen--center">
-      <h1 class="title">이름 없는 덱빌더</h1>
-      <p class="subtitle">턴제 덱빌딩 로그라이트 · 프로토타입</p>
+      <h1 class="title">계승의 장</h1>
+      <p class="subtitle">폐기 예정 스캐폴딩 · 설계와 일치하지 않음</p>
       <button class="btn btn--primary" data-action="toCharacterSelect">시작</button>
     </section>`;
 }
