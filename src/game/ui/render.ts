@@ -9,7 +9,7 @@ import { getSkill } from '../data/skills';
 import { getPotion } from '../data/potions';
 import { stacked } from '../systems/potions';
 import { getUpgrade } from '../data/upgrades';
-import { canUse, livingEnemies, mitigatedDamage, skillCost, unguardedDamage } from '../systems/combat';
+import { canUse, damageTaken, depsFor, livingEnemies, skillCost } from '../systems/combat';
 import { activeUpgrades, selectionRefusal, swapCost } from '../systems/upgrades';
 import { modifiersFor } from '../systems/modifiers';
 
@@ -248,12 +248,13 @@ function enemyView(s: CombatState, e: CombatState['enemies'][number], i: number,
 }
 
 function playerView(run: RunState, s: CombatState, ui: UiState): string {
-  const mods = modifiersFor(run);
+  const deps = depsFor(run);
+  const mods = deps.mods;
   const actions = uniqueSkills(run, 'action')
     .map((id) => {
       const sk = getSkill(id);
-      const cost = skillCost(s, sk);
-      const ok = canUse(s, sk);
+      const cost = skillCost(s, sk, deps);
+      const ok = canUse(s, sk, deps);
       const selected = ui.pendingSkillId === id;
       const dmg = Math.max(0, (sk.damage ?? 0) + mods.damage);
       return `
@@ -277,7 +278,7 @@ function playerView(run: RunState, s: CombatState, ui: UiState): string {
 }
 
 function defendView(run: RunState, s: CombatState): string {
-  const mods = modifiersFor(run);
+  const deps = depsFor(run);
   const { attack, enemyIndex, rest } = s.pending!;
   const enemyName = getEnemy(s.enemies[enemyIndex]!.defId).name;
   const raw = attack.damage;
@@ -285,9 +286,9 @@ function defendView(run: RunState, s: CombatState): string {
   const options = uniqueSkills(run, 'defense')
     .map((id) => {
       const sk = getSkill(id);
-      const cost = skillCost(s, sk);
-      const ok = canUse(s, sk);
-      const after = mitigatedDamage(raw, sk.mitigation!, mods.mitigation);
+      const cost = skillCost(s, sk, deps);
+      const ok = canUse(s, sk, deps);
+      const after = damageTaken(s, raw, sk, deps);
       return `
       <button class="pick" data-action="defend" data-id="${esc(id)}" ${ok ? '' : 'disabled'}>
         <span class="pick__name">${esc(sk.name)} · 노트 ${cost}</span>
@@ -306,7 +307,7 @@ function defendView(run: RunState, s: CombatState): string {
       ${options}
       <button class="pick" data-action="defend" data-id="">
         <span class="pick__name">방어 안 함 · 노트 0</span>
-        <span class="pick__tagline">받는 피해 ${unguardedDamage(raw, mods)} (무방비)</span>
+        <span class="pick__tagline">받는 피해 ${damageTaken(s, raw, null, deps)} (무방비)</span>
       </button>
     </div>`;
 }

@@ -72,6 +72,35 @@ const UPGRADES: UpgradeDef[] = [
     modifiers: { unguardedMult: 0.4 },
     multipliers: { damage: 2 },
   },
+  // ── 규칙 개변을 쓰는 예 ──────────────────────
+  // 계산 자체를 바꾼다. 값·메타·반응 어느 것으로도 표현할 수 없는 종류다.
+  // ⚠️ 이런 효과를 실제로 둘지는 design.md에서 아직 미정이다. 아래는 인프라가
+  //    도는지 보여주려는 플레이스홀더다.
+  {
+    id: 'drop_firstfree',
+    name: '첫 수',
+    polarity: 'positive',
+    cost: 0,
+    text: '사이클의 첫 행동은 턴 노트를 쓰지 않는다.',
+    modifiers: {},
+    rules: {
+      // next()를 부르지 않고 0을 돌려준다 = 기본 규칙을 통째로 대체
+      skillCost: (ctx, input, next) =>
+        input.skill.kind === 'action' && ctx.combat.player.overload === 0 ? 0 : next(),
+    },
+  },
+  {
+    id: 'drop_hoard',
+    name: '쟁이는 버릇',
+    polarity: 'negative',
+    cost: 0,
+    text: '턴 노트가 리필되지 않고 이월된다. 대신 사이클마다 1만 채워진다.',
+    modifiers: {},
+    rules: {
+      // 확정 규칙("매 사이클 리필")을 바꾼다 — 규칙 개변이란 이런 것이다
+      notesOnCycleStart: (_ctx, input) => Math.min(input.maxNotes, input.carried + 1),
+    },
+  },
   // 메타 효과를 쓰는 예. 다른 효과(포션)의 기여를 건드린다.
   // 납작한 합이었다면 "어떤 기여가 포션에서 왔는지"가 사라져서 불가능했다.
   {
@@ -115,8 +144,8 @@ const WORSE_WHEN: Record<keyof CombatModifiers, 'negative' | 'positive'> = {
 export const Upgrades = defineRegistry('강화', UPGRADES, (u) => {
   if (u.cost < 0) return 'cost는 0 이상이어야 한다';
   const keys = Object.keys(u.modifiers) as Array<keyof CombatModifiers>;
-  if (keys.length === 0 && !u.hooks && !u.multipliers && !u.meta)
-    return 'modifiers / multipliers / meta / hooks 중 아무것도 없다 — 효과가 없는 강화';
+  if (keys.length === 0 && !u.hooks && !u.multipliers && !u.meta && !u.rules)
+    return 'modifiers / multipliers / meta / hooks / rules 중 아무것도 없다 — 효과가 없는 강화';
 
   // 확정: 긍정 = 순수 메리트. 디메리트가 섞이면 안 된다.
   if (u.polarity === 'positive') {

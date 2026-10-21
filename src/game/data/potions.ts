@@ -81,8 +81,8 @@ const POTIONS: PotionDef[] = [
 export const Potions = defineRegistry('포션', POTIONS, (p) => {
   if (p.floors < 1) return 'floors는 1 이상이어야 한다 (최소 한 층은 지속)';
   if (p.price < 0) return 'price는 0 이상이어야 한다';
-  if (Object.keys(p.modifiers).length === 0 && !p.hooks && !p.multipliers && !p.meta)
-    return 'modifiers / multipliers / meta / hooks 중 아무것도 없다 — 효과가 없는 포션';
+  if (Object.keys(p.modifiers).length === 0 && !p.hooks && !p.multipliers && !p.meta && !p.rules)
+    return 'modifiers / multipliers / meta / hooks / rules 중 아무것도 없다 — 효과가 없는 포션';
   return null;
 });
 

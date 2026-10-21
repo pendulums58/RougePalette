@@ -31,6 +31,7 @@ import { getCharacter } from '../data/characters';
 import { awardResources } from './upgrades';
 import { modifiersFor } from './modifiers';
 import { fire } from './hooks';
+import { resolveRule } from './rules';
 
 /**
  * 전투 로직이 필요로 하는 것들. 인자를 길게 늘어놓는 대신 하나로 묶는다.
@@ -49,17 +50,20 @@ export function depsFor(run: RunState): CombatDeps {
 // ── 코스트 ──────────────────────────────────────
 
 /**
- * 스킬의 실제 코스트.
- * 확정: 행동 스킬은 현재 과부하만큼 증가한다 (1코스트 연속 사용 -> 1, 2, 3 ...).
- *       방어 스킬은 과부하의 영향을 **전혀** 받지 않는다.
+ * 스킬의 실제 코스트. **규칙 가로채기 지점이다.**
+ *
+ * 기본 규칙(확정): 행동 스킬은 현재 과부하만큼 증가한다 (1코스트 연속 사용 -> 1, 2, 3 ...).
+ *                 방어 스킬은 과부하의 영향을 **전혀** 받지 않는다.
+ * 효과가 rules.skillCost로 이 계산을 통째로 바꿀 수 있다.
  */
-export function skillCost(s: CombatState, skill: SkillDef): number {
-  if (skill.kind === 'defense') return skill.cost;
-  return skill.cost + s.player.overload;
+export function skillCost(s: CombatState, skill: SkillDef, deps: CombatDeps): number {
+  return resolveRule(deps.run, s, deps.mods, 'skillCost', { skill }, () =>
+    skill.kind === 'defense' ? skill.cost : skill.cost + s.player.overload,
+  );
 }
 
-export function canUse(s: CombatState, skill: SkillDef): boolean {
-  return s.player.notes >= skillCost(s, skill);
+export function canUse(s: CombatState, skill: SkillDef, deps: CombatDeps): boolean {
+  return s.player.notes >= skillCost(s, skill, deps);
 }
 
 // ── 피해 ────────────────────────────────────────
@@ -71,6 +75,23 @@ export function mitigatedDamage(raw: number, m: Mitigation, bonus: number): numb
 
 export function unguardedDamage(raw: number, mods: CombatModifiers): number {
   return Math.round(raw * mods.unguardedMult);
+}
+
+/**
+ * 실제로 받는 피해. **규칙 가로채기 지점이다.**
+ * 기본 규칙: 방어 스킬을 썼으면 경감, 안 썼으면 무방비 배율.
+ */
+export function damageTaken(
+  s: CombatState,
+  raw: number,
+  skill: SkillDef | null,
+  deps: CombatDeps,
+): number {
+  return resolveRule(deps.run, s, deps.mods, 'damageTaken', { raw, skill }, () =>
+    skill?.mitigation
+      ? mitigatedDamage(raw, skill.mitigation, deps.mods.mitigation)
+      : unguardedDamage(raw, deps.mods),
+  );
 }
 
 // ── 전투 시작 ───────────────────────────────────
@@ -109,12 +130,12 @@ export function useAction(
   targetIndex: number,
   deps: CombatDeps,
 ): boolean {
-  if (s.phase !== 'player' || skill.kind !== 'action' || !canUse(s, skill)) return false;
+  if (s.phase !== 'player' || skill.kind !== 'action' || !canUse(s, skill, deps)) return false;
 
   const living = livingEnemies(s);
   if (living.length === 0) return false;
 
-  const cost = skillCost(s, skill);
+  const cost = skillCost(s, skill, deps);
   s.player.notes -= cost;
 
   const dmg = Math.max(0, (skill.damage ?? 0) + deps.mods.damage);
@@ -127,8 +148,10 @@ export function useAction(
   }
   s.log.push(`${skill.name} (노트 ${cost}) → 피해 ${dmg}${skill.hitsAll ? ' (전체)' : ''}.`);
 
-  // 확정: 사이클 중 행동할 때마다 과부하가 쌓인다
-  s.player.overload += deps.mods.overloadPerAction;
+  // 확정: 사이클 중 행동할 때마다 과부하가 쌓인다. **규칙 가로채기 지점.**
+  s.player.overload += resolveRule(
+    deps.run, s, deps.mods, 'overloadGain', { skill }, () => deps.mods.overloadPerAction,
+  );
 
   emit(s, { kind: 'action', skillId: skill.id }, deps.character);
   fire(deps.run, s, deps.mods, 'onAction', { skillId: skill.id, cost, damageDealt: dmg * targets.length }); // ★
@@ -186,14 +209,14 @@ export function resolveDefense(s: CombatState, skill: SkillDef | null, deps: Com
   let event: CombatEvent;
 
   if (skill === null) {
-    taken = unguardedDamage(attack.damage, deps.mods);
+    taken = damageTaken(s, attack.damage, null, deps);
     event = { kind: 'unguarded', raw: attack.damage, taken };
     s.log.push(`${enemyName}의 ${attack.name} · 무방비 → 피해 ${taken}.`);
   } else {
-    if (skill.kind !== 'defense' || !skill.mitigation || !canUse(s, skill)) return false;
-    const cost = skillCost(s, skill);
+    if (skill.kind !== 'defense' || !skill.mitigation || !canUse(s, skill, deps)) return false;
+    const cost = skillCost(s, skill, deps);
     s.player.notes -= cost;
-    taken = mitigatedDamage(attack.damage, skill.mitigation, deps.mods.mitigation);
+    taken = damageTaken(s, attack.damage, skill, deps);
     event = { kind: 'defended', skillId: skill.id, raw: attack.damage, taken };
     s.log.push(`${enemyName}의 ${attack.name} · ${skill.name} (노트 ${cost}) → 피해 ${taken}.`);
   }
@@ -234,8 +257,16 @@ function endCycle(s: CombatState, deps: CombatDeps): void {
 
   s.cycle += 1;
   // 확정: 턴 노트는 매 사이클 리필 / 과부하는 사이클 종료 시 소멸
-  s.player.notes = s.player.maxNotes;
-  s.player.overload = 0;
+  // 둘 다 **규칙 가로채기 지점**이다.
+  const carried = s.player.notes;
+  s.player.notes = resolveRule(
+    deps.run, s, deps.mods, 'notesOnCycleStart',
+    { maxNotes: s.player.maxNotes, carried },
+    () => s.player.maxNotes,
+  );
+  s.player.overload = resolveRule(
+    deps.run, s, deps.mods, 'overloadOnCycleEnd', { current: s.player.overload }, () => 0,
+  );
   s.pending = null;
   s.phase = 'player';
   s.log.push(`${s.cycle}사이클 시작. 노트 리필, 과부하 초기화.`);

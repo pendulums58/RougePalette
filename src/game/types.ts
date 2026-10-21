@@ -135,6 +135,8 @@ export interface UpgradeDef {
   meta?: MetaOp[];
   /** 값 질의로 표현할 수 없는 반응. 없으면 생략한다 */
   hooks?: EffectHooks;
+  /** 규칙 계산 자체를 가로챈다. 가장 강력하므로 가장 드물게 쓸 것 */
+  rules?: RuleOverrides;
 }
 
 /**
@@ -273,6 +275,52 @@ export type EffectHooks = {
   [K in HookName]?: HookFn<K>;
 };
 
+// ── 규칙 가로채기 ───────────────────────────────
+//
+// 훅(EffectHooks)은 **알림**이다 — "무슨 일이 일어났다". 덧붙이는 건 되지만
+// 계산 자체를 바꾸지는 못한다.
+//
+// 규칙 가로채기는 **결정 지점**이다 — "이 값을 지금 계산하는데, 답이 뭐여야 하는가".
+// 미들웨어처럼 next()로 체인을 엮는다. next()를 부르지 않으면 기본 규칙을 통째로
+// 대체하고, 부른 뒤 결과를 손보면 기본 위에 얹는다.
+//
+// ⚠️ **공식만 가로챈다. 흐름은 가로채지 않는다.**
+//    턴 순서, 방어를 언제 선언하는가, 적 턴 구조는 design.md에서 미정이다.
+//    (역공이 확정되면 사이클 구조 자체가 바뀐다) 미정인 것을 추상화하면
+//    확정될 때 어차피 다시 써야 하므로, 확정된 공식만 연다.
+
+export interface RuleInputs {
+  /** 이 스킬을 쓰는 데 노트가 얼마나 드는가 */
+  skillCost: { skill: SkillDef };
+  /** 이 행동으로 과부하가 얼마나 쌓이는가 */
+  overloadGain: { skill: SkillDef };
+  /** 사이클이 시작될 때 노트가 몇 개가 되는가 */
+  notesOnCycleStart: { maxNotes: number; carried: number };
+  /** 사이클이 끝날 때 과부하가 얼마가 되는가 */
+  overloadOnCycleEnd: { current: number };
+  /** 이 공격으로 실제로 얼마나 맞는가. skill이 null이면 무방비 */
+  damageTaken: { raw: number; skill: SkillDef | null };
+}
+
+export type RuleOutputs = { [K in keyof RuleInputs]: number };
+export type RuleName = keyof RuleInputs;
+
+/** 규칙이 읽을 수 있는 것. 훅과 달리 상태를 바꾸지 않는다 — 값만 돌려준다. */
+export interface RuleContext {
+  readonly combat: CombatState;
+  readonly mods: CombatModifiers;
+  getStack(key: string): number;
+}
+
+export type RuleFn<K extends RuleName> = (
+  ctx: RuleContext,
+  input: RuleInputs[K],
+  /** 다음 가로채기, 없으면 기본 규칙 */
+  next: () => RuleOutputs[K],
+) => RuleOutputs[K];
+
+export type RuleOverrides = { [K in RuleName]?: RuleFn<K> };
+
 // ── 포션 ────────────────────────────────────────
 
 /**
@@ -301,6 +349,8 @@ export interface PotionDef {
   meta?: MetaOp[];
   /** 값 질의로 표현할 수 없는 반응. 스택된 개수만큼 발화한다 */
   hooks?: EffectHooks;
+  /** 규칙 계산 자체를 가로챈다. 스택되면 체인에 그만큼 들어간다 */
+  rules?: RuleOverrides;
 }
 
 /** 지금 몸에 걸려 있는 포션 하나. 같은 id가 여러 개면 그만큼 스택된다. */
