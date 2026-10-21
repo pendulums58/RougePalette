@@ -11,10 +11,11 @@ export default defineConfig({
     target: 'es2022',
     rollupOptions: {
       input: {
-        // index: 폐기 예정 스캐폴딩 (카드/손패 프로토타입)
+        // 본 게임 — 턴 노트 전투
         index: resolve(__dirname, 'index.html'),
-        // proto: 턴 노트 전투 검증용 샌드박스. /proto.html
-        proto: resolve(__dirname, 'proto.html'),
+        // 폐기 예정 카드 스캐폴딩. 지워도 되면 이 줄과 legacy.html, src/{main,types}.ts,
+        // src/{data,systems,ui}/ 를 같이 지운다.
+        legacy: resolve(__dirname, 'legacy.html'),
       },
     },
   },
