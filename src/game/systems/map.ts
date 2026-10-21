@@ -49,10 +49,10 @@ export function generateMap(rng: Rng): GameMap {
     present[0]!.add(col);
 
     for (let f = 1; f < floors; f++) {
-      // 보스 층은 갈래가 하나로 모인다
-      const nextCol = isBossFloor(f)
-        ? Math.floor(width / 2)
-        : Math.min(width - 1, Math.max(0, col + rng.int(-1, 1)));
+      const want = isBossFloor(f)
+        ? Math.floor(width / 2) // 보스 층은 갈래가 하나로 모인다
+        : col + rng.int(-1, 1);
+      const nextCol = clampNonCrossing(links[f - 1]!, col, want, width);
 
       if (!links[f - 1]!.has(col)) links[f - 1]!.set(col, new Set());
       links[f - 1]!.get(col)!.add(nextCol);
@@ -85,17 +85,50 @@ export function generateMap(rng: Rng): GameMap {
   return { width, floors: byFloor, nodes };
 }
 
+/**
+ * 확정: **경로가 서로 교차하지 않는다** (X자로 엇갈리는 모양 금지).
+ *
+ * 한 층의 간선이 "출발이 왼쪽이면 도착도 왼쪽"이라는 단조성을 지키면 두 간선은
+ * 절대 교차하지 않는다. 그래서 새 간선의 도착 칸을
+ *   lo = 나보다 왼쪽에서 출발한 간선들의 도착 중 가장 오른쪽
+ *   hi = 나보다 오른쪽에서 출발한 간선들의 도착 중 가장 왼쪽
+ * 사이로 가둔다. 기존 간선들이 이미 단조로우므로 lo <= hi가 항상 성립한다.
+ */
+function clampNonCrossing(
+  linksAtFloor: Map<number, Set<number>>,
+  from: number,
+  want: number,
+  width: number,
+): number {
+  let lo = 0;
+  let hi = width - 1;
+  for (const [src, targets] of linksAtFloor) {
+    if (src < from) lo = Math.max(lo, ...targets);
+    else if (src > from) hi = Math.min(hi, ...targets);
+  }
+  return Math.min(hi, Math.max(lo, want));
+}
+
 function pickKind(floor: number, rng: Rng): NodeKind {
   if (isBossFloor(floor)) return 'boss';
   if (isRestFloor(floor)) return 'rest';
   // 첫 층은 평범한 전투로 시작한다 (플레이스홀더 규칙)
   if (floor === 0) return 'combat';
-  return rng.next() < 0.25 ? 'elite' : 'combat';
+
+  // ⚠️ 가중치와 등장 규칙은 전부 플레이스홀더다. design.md: "각 노드 종류의
+  //    등장 규칙과 빈도" 미정. 정예는 초반에 안 나오게만 막아 뒀다.
+  const roll = rng.next();
+  if (floor >= 3 && roll < 0.18) return 'elite';
+  if (roll < 0.32) return 'event';
+  if (roll < 0.42) return 'shop';
+  return 'combat';
 }
 
 function enemiesFor(kind: NodeKind, rng: Rng): string[] {
   switch (kind) {
     case 'rest':
+    case 'shop':
+    case 'event':
       return [];
     case 'boss':
       return BOSS_POOL;

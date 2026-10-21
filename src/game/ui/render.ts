@@ -21,6 +21,8 @@ const NODE_LABEL: Record<MapNode['kind'], string> = {
   elite: '정예',
   rest: '휴식 지점',
   boss: '보스',
+  shop: '상점',
+  event: '이벤트',
 };
 
 function esc(s: string): string {
@@ -41,6 +43,10 @@ export function render(game: GameState, ui: UiState): string {
       return rewardScreen(game.run, game.skillChoices, game.upgradeChoices);
     case 'rest':
       return restScreen(game.run);
+    case 'shop':
+      return stubScreen(game.run, '상점', '무엇을 파는지, 화폐가 무엇인지 아직 정해지지 않았다.');
+    case 'event':
+      return stubScreen(game.run, '이벤트', '어떤 조우가 나올지 아직 정해지지 않았다.');
     case 'allocate':
       return allocateScreen(game.run);
     case 'gameOver':
@@ -155,7 +161,7 @@ function mapScreen(run: RunState): string {
     .map((n) => {
       const isOpen = open.has(n.id);
       const state = isOpen ? 'mapnode--open' : visited.has(n.id) ? 'mapnode--visited' : '';
-      const detail = n.enemies.length ? esc(enemyNames(n)) : '휴식';
+      const detail = n.enemies.length ? esc(enemyNames(n)) : '';
       return `
       <button class="mapnode mapnode--${n.kind} ${state}"
         style="left:${((n.col + 0.5) / w) * 100}%;bottom:${((n.floor + 0.5) / floors) * 100}%"
@@ -347,6 +353,22 @@ function restScreen(run: RunState): string {
         다른 선택지는 design.md에서 미정이다. 자원 배분은 이 기회를 소모하지 않는다.
       </p>
       <button class="btn" data-action="toAllocate" data-from="rest">자원 배분</button>
+    </section>`;
+}
+
+/**
+ * 내용이 미정인 노드의 자리표시 화면.
+ * design.md 확정: 상점과 이벤트는 노드 종류로 둔다. 내용은 미정이라 비워 둔다.
+ * 임의로 상점 경제나 이벤트 텍스트를 지어내지 말 것.
+ */
+function stubScreen(run: RunState, title: string, note: string): string {
+  return `
+    <section class="screen screen--center">
+      ${runHeader(run)}
+      <h2 class="heading">${esc(title)}</h2>
+      <p class="subtitle">${esc(note)}</p>
+      <p class="subtitle">노드 종류로 둔다는 것만 확정이다.</p>
+      <button class="btn btn--primary" data-action="leaveStub">지나간다</button>
     </section>`;
 }
 

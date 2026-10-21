@@ -576,3 +576,11 @@ button:disabled {
     display: none;
   }
 }
+
+.mapnode--shop .mapnode__kind {
+  color: #7fb3d5;
+}
+
+.mapnode--event .mapnode__kind {
+  color: #b79bd0;
+}

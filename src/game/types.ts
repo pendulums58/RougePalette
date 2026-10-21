@@ -255,7 +255,7 @@ export interface CombatState {
 
 // ── 런 ──────────────────────────────────────────
 
-export type NodeKind = 'combat' | 'elite' | 'rest' | 'boss';
+export type NodeKind = 'combat' | 'elite' | 'rest' | 'boss' | 'shop' | 'event';
 
 /**
  * 맵의 노드 하나.
@@ -319,6 +319,10 @@ export type GameState =
       upgradeChoices: UpgradeId[];
     }
   | { screen: 'rest'; run: RunState }
+  /** 상점. 확정: 노드 종류로 둔다. 미정: 무엇을 파는지, 화폐가 무엇인지 */
+  | { screen: 'shop'; run: RunState }
+  /** 이벤트. 확정: 노드 종류로 둔다. 미정: 내용과 형태 */
+  | { screen: 'event'; run: RunState }
   /**
    * 자원 배분 화면.
    * 확정: 배분/재배분은 휴식 지점의 기회를 소모하지 않는다. 그래서 휴식의

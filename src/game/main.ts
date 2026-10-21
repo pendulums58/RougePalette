@@ -92,10 +92,10 @@ const actions: Record<string, (el: HTMLElement) => void> = {
 
     run.currentNodeId = node.id;
     run.visited.push(node.id);
-    if (node.kind === 'rest') {
-      game = { screen: 'rest', run };
-      return;
-    }
+    // 전투가 아닌 노드들. 상점·이벤트는 내용이 미정이라 자리만 있다.
+    if (node.kind === 'rest') return void (game = { screen: 'rest', run });
+    if (node.kind === 'shop') return void (game = { screen: 'shop', run });
+    if (node.kind === 'event') return void (game = { screen: 'event', run });
     ui.pendingSkillId = null;
     game = {
       screen: 'combat',
@@ -172,6 +172,12 @@ const actions: Record<string, (el: HTMLElement) => void> = {
 
   skipReward() {
     if (game.screen !== 'reward') return;
+    game = advanceFloor(game.run);
+  },
+
+  /** 상점·이벤트는 아직 할 일이 없어서 그냥 지나간다. */
+  leaveStub() {
+    if (game.screen !== 'shop' && game.screen !== 'event') return;
     game = advanceFloor(game.run);
   },
 
