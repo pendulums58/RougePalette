@@ -40,3 +40,23 @@ export const UPGRADE_CHOICES = 3;
 
 /** 휴식에서 회복하는 최대 체력 비율 */
 export const REST_HEAL_RATIO = 0.3;
+
+// ── 골드 ────────────────────────────────────────
+//
+// design.md 확정: 골드는 전투 보상과 이벤트에서 얻고, 정예·보스가 더 준다.
+// STS 레퍼런스를 그대로 따른다.
+//
+// ⚠️ 아래 수치는 **STS의 값을 그대로 옮긴 것**이다. 이 게임은 런 길이와 전투 수가
+//    다르므로 재조정이 필요할 수 있다. design.md: "골드의 획득량과 가격대" 미정.
+
+export const GOLD_COMBAT: [number, number] = [10, 20];
+export const GOLD_ELITE: [number, number] = [25, 35];
+export const GOLD_BOSS: [number, number] = [95, 105];
+
+// ── 상점 ────────────────────────────────────────
+//
+// design.md 확정: 상점은 스킬을 판다. (그것만 확정)
+// ⚠️ 재고 수와 가격대는 플레이스홀더다.
+
+export const SHOP_STOCK = 4;
+export const SHOP_SKILL_PRICE: [number, number] = [45, 80];

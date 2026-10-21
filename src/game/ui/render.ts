@@ -1,7 +1,7 @@
 // GameState -> HTML 문자열. DOM 이벤트는 main의 위임 핸들러가 처리한다.
 // CLAUDE.md 아키텍처 규칙: 렌더는 전체 다시 그리기, 이벤트는 위임만.
 
-import type { CombatState, GameState, MapNode, RunState, SkillId } from '../types';
+import type { CombatState, GameState, MapNode, RunState, ShopEntry, SkillId } from '../types';
 import { nodeAt, reachable, totalFloors } from '../systems/map';
 import { CHARACTERS, getCharacter } from '../data/characters';
 import { getEnemy } from '../data/enemies';
@@ -44,11 +44,7 @@ export function render(game: GameState, ui: UiState): string {
     case 'rest':
       return restScreen(game.run);
     case 'shop':
-      return stubScreen(
-        game.run,
-        '상점',
-        `화폐가 골드라는 것은 확정이지만, 재고가 무엇인지와 골드를 어떻게 버는지는 아직 정해지지 않았다. (보유 ${game.run.gold} 골드)`,
-      );
+      return shopScreen(game.run, game.stock);
     case 'event':
       return stubScreen(
         game.run,
@@ -378,6 +374,39 @@ function stubScreen(run: RunState, title: string, note: string): string {
       <p class="subtitle">${esc(note)}</p>
       <p class="subtitle">노드 종류로 둔다는 것만 확정이다.</p>
       <button class="btn btn--primary" data-action="leaveStub">지나간다</button>
+    </section>`;
+}
+
+/**
+ * 상점. 확정: **스킬을 판다.** 그것만 확정이다.
+ * 제거·포션은 미정, 유물 비슷한 시스템은 "미정 — 제작자 발의"라 여기 없다.
+ */
+function shopScreen(run: RunState, stock: ShopEntry[]): string {
+  const items = stock
+    .map((e, i) => {
+      const s = getSkill(e.skillId);
+      const afford = run.gold >= e.price;
+      const note = e.sold ? '판매됨' : afford ? `${e.price} 골드` : `${e.price} 골드 · 부족`;
+      return `
+      <button class="pick" data-action="buySkill" data-index="${i}"
+        ${e.sold || !afford ? 'disabled' : ''}>
+        <span class="pick__name">${esc(s.name)} · 노트 ${s.cost}</span>
+        <span class="pick__tagline">${esc(s.text)}</span>
+        <span class="pick__note">${note}</span>
+      </button>`;
+    })
+    .join('');
+
+  return `
+    <section class="screen">
+      ${runHeader(run)}
+      <h2 class="heading">상점</h2>
+      <div class="statuses"><span class="chip">보유 ${run.gold} 골드</span></div>
+      <div class="grid-line__row">${items}</div>
+      <p class="subtitle">
+        스킬을 파는 것만 확정이다. 제거·포션을 둘지, 유물 비슷한 시스템을 넣을지는 미정.
+      </p>
+      <button class="btn btn--primary" data-action="leaveStub">나간다</button>
     </section>`;
 }
 

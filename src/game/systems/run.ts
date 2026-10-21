@@ -9,12 +9,20 @@
 // ⚠️ 맵 구조 자체(층 수, 분기 개수, 정예 노드의 존재)는 design.md에 없다.
 //    아래는 전부 플레이스홀더이며, 맵을 제대로 설계하면 갈아끼우는 자리다.
 
-import type { CharacterDef, RunState, SkillId, UpgradeId } from '../types';
+import type { CharacterDef, NodeKind, RunState, ShopEntry, SkillId, UpgradeId } from '../types';
 import { Rng } from './rng';
 import { newUpgradeState, alreadyGranted } from './upgrades';
 import { grantPool } from '../data/upgrades';
 import { generateMap, nodeAt, reachable, totalFloors } from './map';
-import { SKILL_CHOICES, UPGRADE_CHOICES } from '../tuning';
+import {
+  GOLD_BOSS,
+  GOLD_COMBAT,
+  GOLD_ELITE,
+  SHOP_SKILL_PRICE,
+  SHOP_STOCK,
+  SKILL_CHOICES,
+  UPGRADE_CHOICES,
+} from '../tuning';
 
 export function startRun(character: CharacterDef, seed: number): RunState {
   const rng = new Rng(seed);
@@ -40,6 +48,24 @@ export function choices(run: RunState) {
 
 export function findNode(run: RunState, id: string) {
   return choices(run).find((n) => n.id === id);
+}
+
+/**
+ * 전투에서 떨어지는 골드.
+ * 확정: 전투 보상으로 골드를 얻고, 정예·보스는 더 준다 (STS 레퍼런스).
+ * 수치는 tuning.ts의 플레이스홀더다.
+ */
+export function goldFor(kind: NodeKind, rng: Rng): number {
+  const [lo, hi] = kind === 'boss' ? GOLD_BOSS : kind === 'elite' ? GOLD_ELITE : GOLD_COMBAT;
+  return rng.int(lo, hi);
+}
+
+/** 상점 재고. 확정: 스킬을 판다. 재고 수와 가격대는 플레이스홀더. */
+export function rollShopStock(character: CharacterDef, rng: Rng): ShopEntry[] {
+  const [lo, hi] = SHOP_SKILL_PRICE;
+  return rng
+    .sample(character.skillPool, SHOP_STOCK)
+    .map((skillId) => ({ skillId, price: rng.int(lo, hi), sold: false }));
 }
 
 export function isLastFloor(run: RunState): boolean {

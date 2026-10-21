@@ -327,8 +327,11 @@ export type GameState =
       upgradeChoices: UpgradeId[];
     }
   | { screen: 'rest'; run: RunState }
-  /** 상점. 확정: 노드 종류로 둔다. 미정: 무엇을 파는지, 화폐가 무엇인지 */
-  | { screen: 'shop'; run: RunState }
+  /**
+   * 상점. 확정: 스킬을 판다.
+   * 재고는 화면 상태에 싣는다 — 전체 재렌더마다 다시 뽑히면 안 되므로.
+   */
+  | { screen: 'shop'; run: RunState; stock: ShopEntry[] }
   /** 이벤트. 확정: 노드 종류로 둔다. 미정: 내용과 형태 */
   | { screen: 'event'; run: RunState }
   /**
@@ -338,5 +341,11 @@ export type GameState =
    */
   | { screen: 'allocate'; run: RunState; returnTo: 'map' | 'rest' }
   | { screen: 'gameOver'; run: RunState; won: boolean };
+
+export interface ShopEntry {
+  skillId: SkillId;
+  price: number;
+  sold: boolean;
+}
 
 export type ScreenName = GameState['screen'];

@@ -16,7 +16,15 @@ import {
   useAction,
 } from './systems/combat';
 import { bankResources, grantUpgrade, modifiersFor, selectInLine } from './systems/upgrades';
-import { findNode, isLastFloor, rollSkillChoices, rollUpgradeChoices, startRun } from './systems/run';
+import {
+  findNode,
+  goldFor,
+  isLastFloor,
+  rollShopStock,
+  rollSkillChoices,
+  rollUpgradeChoices,
+  startRun,
+} from './systems/run';
 import { nodeAt } from './systems/map';
 import { render, type UiState } from './ui/render';
 import { REST_HEAL_RATIO } from './tuning';
@@ -44,8 +52,9 @@ function afterCombat(run: RunState, combat: CombatState): GameState | null {
 
   if (combat.outcome === 'lose') return { screen: 'gameOver', run, won: false };
 
-  // 보스는 n층마다 나온다(확정). 런이 끝나는 것은 **마지막** 보스를 넘었을 때뿐이다.
+  // 확정: 전투 보상으로 골드를 얻는다. 정예·보스는 더 준다 (STS 레퍼런스).
   const node = run.currentNodeId ? nodeAt(run.map, run.currentNodeId) : null;
+  if (node) run.gold += goldFor(node.kind, rng);
   if (node?.kind === 'boss' && isLastFloor(run)) return { screen: 'gameOver', run, won: true };
 
   return {
@@ -94,7 +103,8 @@ const actions: Record<string, (el: HTMLElement) => void> = {
     run.visited.push(node.id);
     // 전투가 아닌 노드들. 상점·이벤트는 내용이 미정이라 자리만 있다.
     if (node.kind === 'rest') return void (game = { screen: 'rest', run });
-    if (node.kind === 'shop') return void (game = { screen: 'shop', run });
+    if (node.kind === 'shop')
+      return void (game = { screen: 'shop', run, stock: rollShopStock(getCharacter(run.characterId), rng) });
     if (node.kind === 'event') return void (game = { screen: 'event', run });
     ui.pendingSkillId = null;
     game = {
@@ -175,7 +185,18 @@ const actions: Record<string, (el: HTMLElement) => void> = {
     game = advanceFloor(game.run);
   },
 
-  /** 상점·이벤트는 아직 할 일이 없어서 그냥 지나간다. */
+  /** 확정: 상점은 스킬을 판다. 같은 스킬을 또 사는 것도 막지 않는다. */
+  buySkill(el) {
+    if (game.screen !== 'shop') return;
+    const i = Number(el.dataset.index);
+    const entry = game.stock[i];
+    if (!entry || entry.sold || game.run.gold < entry.price) return;
+    game.run.gold -= entry.price;
+    game.run.skills.push(entry.skillId);
+    entry.sold = true;
+  },
+
+  /** 상점·이벤트에서 나간다. */
   leaveStub() {
     if (game.screen !== 'shop' && game.screen !== 'event') return;
     game = advanceFloor(game.run);
