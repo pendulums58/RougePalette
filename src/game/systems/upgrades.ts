@@ -24,6 +24,7 @@ import type {
 import { emptyPolarityCount } from '../types';
 import { assertGridValid, getUpgrade } from '../data/upgrades';
 import { OVERLOAD_PER_ACTION, UNGUARDED_MULT } from '../tuning';
+import { potionModifiers } from './potions';
 
 /**
  * 강화가 하나도 없을 때의 전투 수치.
@@ -44,7 +45,10 @@ export function activeUpgrades(run: RunState): UpgradeId[] {
   return [...run.upgrades.granted, ...Object.values(run.upgrades.allocated)];
 }
 
-/** 활성 강화를 전부 합친 최종 전투 수치. */
+/**
+ * 지금 전투에 적용되는 최종 수치 = 기본 + 활성 강화 + 지속 중인 포션.
+ * 포션은 design.md 확정대로 **전투 시작 시** 이 값으로 들어간다.
+ */
 export function modifiersFor(run: RunState): CombatModifiers {
   const m = baseModifiers();
   for (const id of activeUpgrades(run)) {
@@ -55,6 +59,12 @@ export function modifiersFor(run: RunState): CombatModifiers {
     m.damage += def.modifiers.damage ?? 0;
     m.mitigation += def.modifiers.mitigation ?? 0;
   }
+  const potion = potionModifiers(run);
+  m.notes += potion.notes ?? 0;
+  m.overloadPerAction += potion.overloadPerAction ?? 0;
+  m.unguardedMult += potion.unguardedMult ?? 0;
+  m.damage += potion.damage ?? 0;
+  m.mitigation += potion.mitigation ?? 0;
   // 과부하 증가량이 음수가 되면 규칙이 무너진다. 0 미만으로는 내려가지 않게 한다.
   m.overloadPerAction = Math.max(0, m.overloadPerAction);
   m.unguardedMult = Math.max(1, m.unguardedMult); // 무방비가 방어보다 유리해지지 않게

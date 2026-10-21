@@ -16,6 +16,7 @@ export type SkillId = string;
 export type EnemyId = string;
 export type UpgradeId = string;
 export type GridLineId = string;
+export type PotionId = string;
 export type NodeId = string;
 
 /** 강화와 자원의 두 계열. 역할 분리는 확정이다. */
@@ -168,6 +169,45 @@ export interface UpgradeState {
   resources: PolarityCount;
 }
 
+// ── 포션 ────────────────────────────────────────
+
+/**
+ * 포션. STS에서 느낌을 가져왔지만 **소모품이 아니다.**
+ *
+ * design.md **확정**:
+ * - 일정 **층** 동안 지속되는 일시적 강화 버프
+ * - 여러 종류를 만든다
+ * - 지속되는 동안 **전투 시작 시 버프로 적용된다**
+ * - **스택형**이다 (같은 것을 여러 개 가지면 그만큼 쌓인다)
+ *
+ * 미정: 지속 층수, 종류별 효과, 스택 상한, 상점 말고 다른 획득 경로, 가격대.
+ */
+export interface PotionDef {
+  id: PotionId;
+  name: string;
+  text: string;
+  /** 몇 층 동안 지속되는가 */
+  floors: number;
+  price: number;
+  /** 전투 시작 시 더해지는 값. 스택되면 개수만큼 더해진다 */
+  modifiers: Partial<CombatModifiers>;
+}
+
+/** 지금 몸에 걸려 있는 포션 하나. 같은 id가 여러 개면 그만큼 스택된다. */
+export interface ActivePotion {
+  id: PotionId;
+  /** 남은 층수. 층을 넘길 때마다 1씩 줄고 0이 되면 사라진다 */
+  floorsLeft: number;
+  /**
+   * 획득한 층을 아직 안 벗어났다는 표시.
+   *
+   * 포션을 사는 층(상점·이벤트)에서는 전투가 없어 포션을 쓸 수 없다. 그 층을
+   * 떠날 때 틱이 먹히면 "3층짜리"가 실제로는 2층만 가게 된다. 그래서 획득한
+   * 층을 떠나는 첫 틱은 건너뛴다. 그러면 지속 층수 = 실제로 쓸 수 있는 층수가 된다.
+   */
+  fresh: boolean;
+}
+
 // ── 캐릭터 ──────────────────────────────────────
 
 export interface CharacterDef {
@@ -292,6 +332,8 @@ export interface RunState {
   maxHp: number;
   /** 보유 스킬 */
   skills: SkillId[];
+  /** 지속 중인 포션. 층을 넘길 때마다 남은 층수가 준다 */
+  potions: ActivePotion[];
   /**
    * 상점 화폐 (확정: 골드가 있다).
    *
@@ -342,10 +384,9 @@ export type GameState =
   | { screen: 'allocate'; run: RunState; returnTo: 'map' | 'rest' }
   | { screen: 'gameOver'; run: RunState; won: boolean };
 
-export interface ShopEntry {
-  skillId: SkillId;
-  price: number;
-  sold: boolean;
-}
+/** 상점 재고 한 칸. 확정: 상점은 스킬과 포션을 판다. */
+export type ShopEntry =
+  | { kind: 'skill'; refId: SkillId; price: number; sold: boolean }
+  | { kind: 'potion'; refId: PotionId; price: number; sold: boolean };
 
 export type ScreenName = GameState['screen'];

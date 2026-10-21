@@ -9,15 +9,20 @@
 // - 공용 강화와 캐릭터 전용 강화를 섞는다
 //
 // **미정**: 라인 수, 라인 이름, 라인당 후보 수, 코스트 티어, 효과의 종류.
+//
+// ── 추가하는 법 ──────────────────────────────────
+//   배열에 객체 하나 + buildGrid()의 해당 라인 candidates에 id 추가.
+//   긍정 강화에 디메리트를 넣으면 거부된다 (확정 규칙을 기계로 검사한다).
 // 아래 라인 이름(쇄신/용맹/충심, 쾌락/복수/거짓)은 원본 TRPG의 영혼 이름을
 // 옮긴 것이며 확정이 아니다.
 //
 // 원본을 따라 0코스트 부정 후보는 **작은 순수 이득**으로 두고, 대가는 위 티어에서
 // 붙는다. (원본의 0코스트 부정 융화체들도 디메리트가 없었다)
 
-import type { GridLine, UpgradeDef } from '../types';
+import type { CombatModifiers, GridLine, UpgradeDef } from '../types';
+import { defineRegistry } from './registry';
 
-export const UPGRADES: UpgradeDef[] = [
+const UPGRADES: UpgradeDef[] = [
   // ── 공용 · 긍정 (순수 메리트) ────────────────
   { id: 'renew_0', name: '고른 호흡', polarity: 'positive', cost: 0, text: '사이클당 턴 노트 +1.', modifiers: { notes: 1 } },
   { id: 'renew_1', name: '단단한 손아귀', polarity: 'positive', cost: 2, text: '방어 경감 +3.', modifiers: { mitigation: 3 } },
@@ -59,13 +64,37 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'drop_gamble', name: '깨진 저울', polarity: 'negative', cost: 0, text: '피해 +7. 무방비로 받는 피해가 늘어난다.', modifiers: { damage: 7, unguardedMult: 0.4 } },
 ];
 
-const BY_ID = new Map(UPGRADES.map((u) => [u.id, u]));
+/**
+ * 각 수치가 "나빠지는" 방향. design.md 확정인 **긍정 = 순수 메리트**를 기계적으로
+ * 검사하기 위한 표다. 긍정 강화에 이 방향의 값이 들어 있으면 거부한다.
+ */
+const WORSE_WHEN: Record<keyof CombatModifiers, 'negative' | 'positive'> = {
+  notes: 'negative',            // 노트가 줄면 나쁘다
+  damage: 'negative',           // 피해가 줄면 나쁘다
+  mitigation: 'negative',       // 경감이 줄면 나쁘다
+  overloadPerAction: 'positive',// 과부하가 더 쌓이면 나쁘다
+  unguardedMult: 'positive',    // 무방비 피해가 커지면 나쁘다
+};
 
-export function getUpgrade(id: string): UpgradeDef {
-  const u = BY_ID.get(id);
-  if (!u) throw new Error(`unknown upgrade id: ${id}`);
-  return u;
-}
+export const Upgrades = defineRegistry('강화', UPGRADES, (u) => {
+  if (u.cost < 0) return 'cost는 0 이상이어야 한다';
+  const keys = Object.keys(u.modifiers) as Array<keyof CombatModifiers>;
+  if (keys.length === 0) return 'modifiers가 비어 있다 — 아무 효과도 없는 강화';
+
+  // 확정: 긍정 = 순수 메리트. 디메리트가 섞이면 안 된다.
+  if (u.polarity === 'positive') {
+    const bad = keys.filter((k) => {
+      const v = u.modifiers[k] ?? 0;
+      return WORSE_WHEN[k] === 'negative' ? v < 0 : v > 0;
+    });
+    if (bad.length) {
+      return `긍정 강화는 순수 메리트여야 한다 (확정 규칙). 디메리트: ${bad.join(', ')}`;
+    }
+  }
+  return null;
+});
+
+export const getUpgrade = Upgrades.get;
 
 /**
  * 캐릭터의 배분 그리드를 만든다.
@@ -86,7 +115,7 @@ export function buildGrid(characterId: string): GridLine[] {
 /** 무작위 제시(보상) 경로에만 나오는 강화 — 그리드에 없는 것들. */
 export function grantPool(characterId: string): string[] {
   const inGrid = new Set(buildGrid(characterId).flatMap((l) => l.candidates));
-  return UPGRADES.filter(
+  return Upgrades.filter(
     (u) => !inGrid.has(u.id) && (u.characterId === undefined || u.characterId === characterId),
   ).map((u) => u.id);
 }

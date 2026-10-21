@@ -6,10 +6,15 @@
 //
 // 이 패턴은 플레이어에게 표시하지 않는다 (적 의도 표시는 구조적으로 성립 불가).
 // 적의 턴 노트와 방어는 미정이라 없다.
+//
+// ── 추가하는 법 ──────────────────────────────────
+//   { id, name, hp, pattern: [[{name, damage}], [{...}, {...}]] }
+//   pattern의 원소 하나 = 적 턴 하나. 빈 턴이나 피해 0은 거부된다.
 
 import type { EnemyDef } from '../types';
+import { defineRegistry } from './registry';
 
-export const ENEMIES: EnemyDef[] = [
+const ENEMIES: EnemyDef[] = [
   {
     id: 'husk',
     name: '껍데기',
@@ -58,10 +63,13 @@ export const ENEMIES: EnemyDef[] = [
   },
 ];
 
-const BY_ID = new Map(ENEMIES.map((e) => [e.id, e]));
+export const Enemies = defineRegistry('적', ENEMIES, (e) => {
+  if (e.hp <= 0) return 'hp는 1 이상이어야 한다';
+  if (e.pattern.length === 0) return 'pattern이 비어 있다 — 적이 아무것도 하지 않는다';
+  if (e.pattern.some((turn) => turn.length === 0)) return '빈 턴이 있다 (공격이 없는 턴)';
+  if (e.pattern.some((turn) => turn.some((a) => a.damage <= 0))) return '피해가 0 이하인 공격이 있다';
+  return null;
+});
 
-export function getEnemy(id: string): EnemyDef {
-  const e = BY_ID.get(id);
-  if (!e) throw new Error(`unknown enemy id: ${id}`);
-  return e;
-}
+export const getEnemy = Enemies.get;
+export const ENEMY_IDS = Enemies.ids();

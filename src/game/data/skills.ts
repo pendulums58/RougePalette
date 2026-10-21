@@ -1,13 +1,19 @@
 // ⚠️ 스킬 내용과 수치는 플레이스홀더다. design.md의 "스킬 코스트 분포"는 미정.
 //
+// ── 추가하는 법 ──────────────────────────────────
+//   배열에 객체 하나. 행동 스킬은 damage, 방어 스킬은 mitigation이 필요하다.
+//   characterId를 빼면 공용, 넣으면 그 캐릭터 전용.
+//   규칙을 어기면 게임을 켤 때 바로 터진다 (registry.ts).
+//
 // 틀을 돌리는 데 필요한 최소 구성만 둔다:
 // - 공용 스킬 (characterId 없음) + 캐릭터 전용 스킬
 // - 행동 스킬: 싼 것 / 비싼 것 / 전체 공격 → 과부하와의 상호작용을 보려고
 // - 방어 스킬: 고정값 경감 / 비율 경감 → 경감 방식이 미정이라 둘 다
 
 import type { SkillDef } from '../types';
+import { defineRegistry } from './registry';
 
-export const SKILLS: SkillDef[] = [
+const SKILLS: SkillDef[] = [
   // ── 공용 ────────────────────────────────────
   {
     id: 'slash',
@@ -95,15 +101,20 @@ export const SKILLS: SkillDef[] = [
   },
 ];
 
-const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));
+export const Skills = defineRegistry('스킬', SKILLS, (s) => {
+  if (s.cost < 0) return 'cost는 0 이상이어야 한다';
+  if (s.kind === 'action' && s.damage === undefined) return '행동 스킬에는 damage가 필요하다';
+  if (s.kind === 'defense' && !s.mitigation) return '방어 스킬에는 mitigation이 필요하다';
+  if (s.kind === 'defense' && s.hitsAll) return '방어 스킬에 hitsAll은 의미가 없다';
+  if (s.mitigation?.kind === 'ratio' && (s.mitigation.ratio <= 0 || s.mitigation.ratio > 1))
+    return 'ratio는 0 초과 1 이하여야 한다';
+  return null;
+});
 
-export function getSkill(id: string): SkillDef {
-  const s = BY_ID.get(id);
-  if (!s) throw new Error(`unknown skill id: ${id}`);
-  return s;
-}
+export const getSkill = Skills.get;
+export const SKILL_IDS = Skills.ids();
 
 /** 해당 캐릭터가 쓸 수 있는 스킬 (공용 + 그 캐릭터 전용) */
 export function skillsFor(characterId: string): SkillDef[] {
-  return SKILLS.filter((s) => s.characterId === undefined || s.characterId === characterId);
+  return Skills.filter((s) => s.characterId === undefined || s.characterId === characterId);
 }

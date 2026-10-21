@@ -7,11 +7,18 @@
 //
 // 누가 등장하는지, 몇 명인지, 해금 구조는 전부 미정이다.
 // 아래 둘은 "턴 노트 수치가 다른 캐릭터 둘"이라는 확정 규칙을 돌려보기 위한 더미다.
+//
+// ── 추가하는 법 ──────────────────────────────────
+//   배열에 객체 하나. startingSkills/skillPool은 실제 스킬 id여야 하고,
+//   resourceRules에는 긍정·부정이 둘 다 있어야 하며, grid는 buildGrid()로 만든다.
+//   어기면 게임을 켤 때 바로 터진다.
 
 import type { CharacterDef } from '../types';
 import { assertGridValid, buildGrid } from './upgrades';
+import { Skills } from './skills';
+import { checkRefs, defineRegistry } from './registry';
 
-export const CHARACTERS: CharacterDef[] = [
+const CHARACTERS: CharacterDef[] = [
   {
     id: 'heir',
     name: '계승자',
@@ -46,13 +53,30 @@ export const CHARACTERS: CharacterDef[] = [
   },
 ];
 
-// 데이터를 늘릴 때 그리드 규칙(라인마다 0코스트 후보 하나, 계열 일치)을 깨면 즉시 터진다.
-for (const c of CHARACTERS) assertGridValid(c.grid);
+export const Characters = defineRegistry('캐릭터', CHARACTERS, (c) => {
+  if (c.maxHp <= 0) return 'maxHp는 1 이상이어야 한다';
+  if (c.notes < 1) return 'notes는 1 이상이어야 한다 (확정: 캐릭터마다 다른 턴 노트 수치)';
+  if (c.startingSkills.length === 0) return 'startingSkills가 비어 있다';
+  if (c.skillPool.length === 0) return 'skillPool이 비어 있다';
+  if (c.resourceRules.length === 0) return 'resourceRules가 비어 있다';
 
-const BY_ID = new Map(CHARACTERS.map((c) => [c.id, c]));
+  const bad =
+    checkRefs('startingSkills', c.startingSkills, Skills.has) ??
+    checkRefs('skillPool', c.skillPool, Skills.has);
+  if (bad) return bad;
 
-export function getCharacter(id: string): CharacterDef {
-  const c = BY_ID.get(id);
-  if (!c) throw new Error(`unknown character id: ${id}`);
-  return c;
-}
+  // 확정: 긍정 자원과 부정 자원은 서로 다른 조건으로 쌓인다
+  const polarities = new Set(c.resourceRules.map((r) => r.polarity));
+  if (polarities.size < 2) return '긍정/부정 자원 적립 조건이 둘 다 있어야 한다 (확정 규칙)';
+
+  // 그리드 규칙 (라인마다 0코스트 후보 하나, 후보 계열이 라인과 일치)
+  try {
+    assertGridValid(c.grid);
+  } catch (e) {
+    return (e as Error).message;
+  }
+  return null;
+});
+
+export const getCharacter = Characters.get;
+export const CHARACTER_IDS = Characters.ids();

@@ -58,5 +58,6 @@ export const GOLD_BOSS: [number, number] = [95, 105];
 // design.md 확정: 상점은 스킬을 판다. (그것만 확정)
 // ⚠️ 재고 수와 가격대는 플레이스홀더다.
 
-export const SHOP_STOCK = 4;
+export const SHOP_SKILL_STOCK = 3;
+export const SHOP_POTION_STOCK = 2;
 export const SHOP_SKILL_PRICE: [number, number] = [45, 80];

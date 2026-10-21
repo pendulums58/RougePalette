@@ -14,12 +14,14 @@ import { Rng } from './rng';
 import { newUpgradeState, alreadyGranted } from './upgrades';
 import { grantPool } from '../data/upgrades';
 import { generateMap, nodeAt, reachable, totalFloors } from './map';
+import { POTION_IDS, getPotion } from '../data/potions';
 import {
   GOLD_BOSS,
   GOLD_COMBAT,
   GOLD_ELITE,
+  SHOP_POTION_STOCK,
   SHOP_SKILL_PRICE,
-  SHOP_STOCK,
+  SHOP_SKILL_STOCK,
   SKILL_CHOICES,
   UPGRADE_CHOICES,
 } from '../tuning';
@@ -33,6 +35,7 @@ export function startRun(character: CharacterDef, seed: number): RunState {
     maxHp: character.maxHp,
     skills: [...character.startingSkills],
     gold: 0,
+    potions: [],
     map: generateMap(rng),
     floorIndex: 0,
     currentNodeId: null,
@@ -60,12 +63,19 @@ export function goldFor(kind: NodeKind, rng: Rng): number {
   return rng.int(lo, hi);
 }
 
-/** 상점 재고. 확정: 스킬을 판다. 재고 수와 가격대는 플레이스홀더. */
+/**
+ * 상점 재고. 확정: **스킬과 포션을 판다.**
+ * 재고 구성과 가격대는 플레이스홀더다.
+ */
 export function rollShopStock(character: CharacterDef, rng: Rng): ShopEntry[] {
   const [lo, hi] = SHOP_SKILL_PRICE;
-  return rng
-    .sample(character.skillPool, SHOP_STOCK)
-    .map((skillId) => ({ skillId, price: rng.int(lo, hi), sold: false }));
+  const skills: ShopEntry[] = rng
+    .sample(character.skillPool, SHOP_SKILL_STOCK)
+    .map((refId) => ({ kind: 'skill' as const, refId, price: rng.int(lo, hi), sold: false }));
+  const potions: ShopEntry[] = rng
+    .sample(POTION_IDS, SHOP_POTION_STOCK)
+    .map((refId) => ({ kind: 'potion' as const, refId, price: getPotion(refId).price, sold: false }));
+  return [...skills, ...potions];
 }
 
 export function isLastFloor(run: RunState): boolean {

@@ -16,6 +16,7 @@ import {
   useAction,
 } from './systems/combat';
 import { bankResources, grantUpgrade, modifiersFor, selectInLine } from './systems/upgrades';
+import { addPotion, tickPotions } from './systems/potions';
 import {
   findNode,
   goldFor,
@@ -73,6 +74,8 @@ function settle(run: RunState, combat: CombatState): void {
 }
 
 function advanceFloor(run: RunState): GameState {
+  // 확정: 포션은 일정 **층** 동안 지속된다. 층을 넘길 때 줄인다.
+  tickPotions(run);
   if (isLastFloor(run)) return { screen: 'gameOver', run, won: true };
   run.floorIndex += 1;
   return { screen: 'map', run };
@@ -185,14 +188,18 @@ const actions: Record<string, (el: HTMLElement) => void> = {
     game = advanceFloor(game.run);
   },
 
-  /** 확정: 상점은 스킬을 판다. 같은 스킬을 또 사는 것도 막지 않는다. */
-  buySkill(el) {
+  /**
+   * 확정: 상점은 스킬과 포션을 판다.
+   * 같은 것을 또 사는 것을 막지 않는다 — 스킬은 중복 강화(제작자 발의)의
+   * 획득 경로이고, 포션은 확정 규칙상 스택형이기 때문이다.
+   */
+  buy(el) {
     if (game.screen !== 'shop') return;
-    const i = Number(el.dataset.index);
-    const entry = game.stock[i];
+    const entry = game.stock[Number(el.dataset.index)];
     if (!entry || entry.sold || game.run.gold < entry.price) return;
     game.run.gold -= entry.price;
-    game.run.skills.push(entry.skillId);
+    if (entry.kind === 'skill') game.run.skills.push(entry.refId);
+    else addPotion(game.run, entry.refId);
     entry.sold = true;
   },
 

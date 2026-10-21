@@ -3,9 +3,11 @@
 
 import type { CombatState, GameState, MapNode, RunState, ShopEntry, SkillId } from '../types';
 import { nodeAt, reachable, totalFloors } from '../systems/map';
-import { CHARACTERS, getCharacter } from '../data/characters';
+import { Characters, getCharacter } from '../data/characters';
 import { getEnemy } from '../data/enemies';
 import { getSkill } from '../data/skills';
+import { getPotion } from '../data/potions';
+import { stacked } from '../systems/potions';
 import { getUpgrade } from '../data/upgrades';
 import { canUse, livingEnemies, mitigatedDamage, skillCost, unguardedDamage } from '../systems/combat';
 import { activeUpgrades, modifiersFor, selectionRefusal, swapCost } from '../systems/upgrades';
@@ -82,6 +84,17 @@ function hpBar(hp: number, maxHp: number, label: string): string {
     </div>`;
 }
 
+function potionChips(run: RunState): string {
+  const list = stacked(run);
+  if (list.length === 0) return '';
+  return `<div class="statuses">${list
+    .map((p) => {
+      const def = getPotion(p.id);
+      return `<span class="chip">${esc(def.name)}${p.count > 1 ? ` ×${p.count}` : ''} · ${p.floorsLeft}층</span>`;
+    })
+    .join('')}</div>`;
+}
+
 function activeUpgradeChips(run: RunState): string {
   const ids = activeUpgrades(run);
   if (ids.length === 0) return '<div class="statuses"><span class="chip">강화 없음</span></div>';
@@ -122,7 +135,7 @@ function titleScreen(): string {
 }
 
 function characterSelect(): string {
-  const picks = CHARACTERS.map(
+  const picks = Characters.all.map(
     (c) => `
       <button class="pick" data-action="chooseCharacter" data-id="${esc(c.id)}">
         <span class="pick__name">${esc(c.name)}</span>
@@ -185,6 +198,7 @@ function mapScreen(run: RunState): string {
         <svg class="map__edges" viewBox="0 0 ${w} ${floors}" preserveAspectRatio="none">${edges}</svg>
         ${nodes}
       </div>
+      ${potionChips(run)}
       ${activeUpgradeChips(run)}
       <button class="btn" data-action="toAllocate" data-from="map">자원 배분</button>
       ${skillList(run)}
@@ -384,14 +398,17 @@ function stubScreen(run: RunState, title: string, note: string): string {
 function shopScreen(run: RunState, stock: ShopEntry[]): string {
   const items = stock
     .map((e, i) => {
-      const s = getSkill(e.skillId);
       const afford = run.gold >= e.price;
       const note = e.sold ? '판매됨' : afford ? `${e.price} 골드` : `${e.price} 골드 · 부족`;
+      const [title, body] =
+        e.kind === 'skill'
+          ? [`${getSkill(e.refId).name} · 노트 ${getSkill(e.refId).cost}`, getSkill(e.refId).text]
+          : [`${getPotion(e.refId).name} · ${getPotion(e.refId).floors}층`, getPotion(e.refId).text];
       return `
-      <button class="pick" data-action="buySkill" data-index="${i}"
+      <button class="pick" data-action="buy" data-index="${i}"
         ${e.sold || !afford ? 'disabled' : ''}>
-        <span class="pick__name">${esc(s.name)} · 노트 ${s.cost}</span>
-        <span class="pick__tagline">${esc(s.text)}</span>
+        <span class="pick__name">${esc(title)}</span>
+        <span class="pick__tagline">${esc(body)}</span>
         <span class="pick__note">${note}</span>
       </button>`;
     })
@@ -404,7 +421,7 @@ function shopScreen(run: RunState, stock: ShopEntry[]): string {
       <div class="statuses"><span class="chip">보유 ${run.gold} 골드</span></div>
       <div class="grid-line__row">${items}</div>
       <p class="subtitle">
-        스킬을 파는 것만 확정이다. 제거·포션을 둘지, 유물 비슷한 시스템을 넣을지는 미정.
+        스킬과 포션을 파는 것이 확정이다. 제거를 둘지, 전승(= 유물)을 넣을지는 미정.
       </p>
       <button class="btn btn--primary" data-action="leaveStub">나간다</button>
     </section>`;
