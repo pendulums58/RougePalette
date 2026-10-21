@@ -34,9 +34,18 @@ const ENEMIES: EnemyDef[] = [
     ],
   },
   {
+    // ⚠️ 역공 조건 플레이스홀더. design.md: 조건을 몹에 둘지 캐릭터에 둘지
+    //    둘 다일지 **미정**이고, 구체적인 조건도 미정이다. 아래는 인프라가
+    //    도는지 보여주려고 넣은 예시 하나다.
+    //
+    //    제작자가 몹마다 두는 이점으로 든 것: 처음엔 알 수 없어서 플레이어가
+    //    겪으며 배우게 된다. 그래서 이 조건은 UI에 표시하지 않는다.
     id: 'sentinel',
     name: '파수꾼',
     hp: 58,
+    // 큰 피해를 한 번에 맞으면 되받아친다 — "무지성 공격에 리스크"의 한 형태
+    counter: (ctx, trigger) =>
+      trigger.at === 'afterPlayerAction' && trigger.damageDealt >= ctx.enemy.hp * 0.25,
     pattern: [
       [{ name: '내려베기', damage: 16 }],
       [

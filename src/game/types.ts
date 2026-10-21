@@ -137,6 +137,8 @@ export interface UpgradeDef {
   hooks?: EffectHooks;
   /** 규칙 계산 자체를 가로챈다. 가장 강력하므로 가장 드물게 쓸 것 */
   rules?: RuleOverrides;
+  /** 역공 조건을 더한다 */
+  counter?: CounterCheck;
 }
 
 /**
@@ -275,6 +277,45 @@ export type EffectHooks = {
   [K in HookName]?: HookFn<K>;
 };
 
+// ── 역공 ────────────────────────────────────────
+//
+// design.md **확정**: 역공을 쓴다. 특정 조건에서 몬스터가 일시적으로 턴을 뺏는다.
+// 목적은 무지성 공격에 리스크를 주는 것.
+//
+// **미정**: 조건이 어디에 붙는가(몹마다 / 캐릭터마다 / 둘 다), 구체적인 조건,
+//          역공이 정확히 무엇을 하는가.
+//
+// 그래서 **판정 함수의 자리와 끼어드는 흐름만** 만들어 두었다. 판정은 캐릭터·적·
+// 강화·포션 어디에 붙여도 같은 자리에서 돌아간다. 나중에 소재지를 바꿔도 데이터만
+// 옮기면 된다.
+
+/** 역공 판정이 일어나는 시점과 그때 벌어진 일. */
+export type CounterTrigger =
+  /** 플레이어가 행동 스킬을 쓴 직후 */
+  | { at: 'afterPlayerAction'; skillId: SkillId; cost: number; damageDealt: number }
+  /** 플레이어가 방어 결정을 한 직후 (skillId가 null이면 무방비) */
+  | { at: 'afterPlayerDefend'; skillId: SkillId | null; raw: number; taken: number };
+
+/**
+ * 판정이 읽을 수 있는 것. 조건을 어디에 두든 필요한 정보가 다 들어 있다.
+ * - 몹에 두려면 `enemy`를 본다
+ * - 캐릭터에 두려면 `character`를 본다
+ * - 피해 계산에 두려면 trigger의 damageDealt / taken을 본다
+ * - 전투 상황에 두려면 `combat`과 `getStack`을 본다
+ */
+export interface CounterContext {
+  readonly combat: CombatState;
+  readonly mods: CombatModifiers;
+  readonly character: CharacterDef;
+  /** 판정 대상인 적 */
+  readonly enemy: EnemyDef;
+  readonly enemyIndex: number;
+  getStack(key: string): number;
+}
+
+/** true면 역공이 일어난다. 상태를 바꾸지 말 것 — 판정만 한다. */
+export type CounterCheck = (ctx: CounterContext, trigger: CounterTrigger) => boolean;
+
 // ── 규칙 가로채기 ───────────────────────────────
 //
 // 훅(EffectHooks)은 **알림**이다 — "무슨 일이 일어났다". 덧붙이는 건 되지만
@@ -351,6 +392,8 @@ export interface PotionDef {
   hooks?: EffectHooks;
   /** 규칙 계산 자체를 가로챈다. 스택되면 체인에 그만큼 들어간다 */
   rules?: RuleOverrides;
+  /** 역공 조건을 더한다 */
+  counter?: CounterCheck;
 }
 
 /** 지금 몸에 걸려 있는 포션 하나. 같은 id가 여러 개면 그만큼 스택된다. */
@@ -385,6 +428,8 @@ export interface CharacterDef {
   resourceRules: ResourceRule[];
   /** 배분 그리드. 라인 수와 이름은 미정이라 플레이스홀더다. */
   grid: GridLine[];
+  /** 이 캐릭터가 당하는 역공 조건. 미정이라 비어 있다. */
+  counter?: CounterCheck;
 }
 
 // ── 적 ──────────────────────────────────────────
@@ -408,6 +453,11 @@ export interface EnemyDef {
    * design.md의 "검토 중인 제안(AI)" 구획에 있고 확정이 아니다.
    */
   pattern: EnemyAttack[][];
+  /**
+   * 이 적의 역공 조건. 미정이라 비어 있다.
+   * 제작자가 든 이점: 몹마다 두면 처음엔 알 수 없어서 "경험에 의한 플레이어의 성장"이 된다.
+   */
+  counter?: CounterCheck;
 }
 
 // ── 전투 ────────────────────────────────────────
@@ -436,6 +486,11 @@ export interface PendingAttack {
   attack: EnemyAttack;
   /** 같은 적 턴에 아직 남아 있는 공격들 */
   rest: Array<{ enemyIndex: number; attack: EnemyAttack }>;
+  /**
+   * 역공으로 끼어든 공격인가.
+   * true면 해결한 뒤 **사이클을 끝내지 않고 플레이어 턴으로 돌아간다.**
+   */
+  counter?: boolean;
 }
 
 export type CombatPhase = 'player' | 'defend' | 'over';

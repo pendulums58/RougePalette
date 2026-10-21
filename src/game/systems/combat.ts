@@ -16,6 +16,7 @@
 
 import type {
   CharacterDef,
+  CounterTrigger,
   CombatEvent,
   CombatModifiers,
   CombatState,
@@ -32,6 +33,7 @@ import { awardResources } from './upgrades';
 import { modifiersFor } from './modifiers';
 import { fire } from './hooks';
 import { resolveRule } from './rules';
+import { checkCounter } from './counter';
 
 /**
  * 전투 로직이 필요로 하는 것들. 인자를 길게 늘어놓는 대신 하나로 묶는다.
@@ -160,6 +162,20 @@ export function useAction(
   }
 
   checkOutcome(s);
+
+  // 확정: 역공. 플레이어 행동 직후가 주요 판정 시점이다 (무지성 공격에 리스크).
+  if (s.outcome === null && s.phase === 'player') {
+    const hit = findCounter(
+      s, deps,
+      { at: 'afterPlayerAction', skillId: skill.id, cost, damageDealt: dmg * targets.length },
+      livingEnemies(s),
+    );
+    if (hit) {
+      s.log.push(`${getEnemy(s.enemies[hit.index]!.defId).name}의 역공! (${hit.source})`);
+      s.pending = { enemyIndex: hit.index, attack: hit.attack, rest: [], counter: true };
+      s.phase = 'defend';
+    }
+  }
   return true;
 }
 
@@ -204,6 +220,7 @@ export function resolveDefense(s: CombatState, skill: SkillDef | null, deps: Com
   if (s.phase !== 'defend' || !s.pending) return false;
 
   const { attack, enemyIndex, rest } = s.pending;
+  const wasCounter = s.pending.counter === true;
   const enemyName = getEnemy(s.enemies[enemyIndex]!.defId).name;
   let taken: number;
   let event: CombatEvent;
@@ -235,8 +252,62 @@ export function resolveDefense(s: CombatState, skill: SkillDef | null, deps: Com
     return true;
   }
 
+  // 역공으로 끼어든 공격이었다면 사이클을 끝내지 않고 **플레이어 턴으로 돌아간다.**
+  // 역공 중에 또 역공이 터지는지는 미정이라 지금은 막아 두었다.
+  if (wasCounter) {
+    s.phase = 'player';
+    s.log.push('역공을 넘겼다. 다시 내 턴.');
+    return true;
+  }
+
+  // 적 턴 중이었다면: 여기서도 역공이 터질 수 있다.
+  // 이때는 턴을 뺏는 게 아니라 남은 큐 앞에 공격 하나가 더 끼어든다.
+  const hit = findCounter(
+    s, deps,
+    { at: 'afterPlayerDefend', skillId: skill?.id ?? null, raw: attack.damage, taken },
+    [enemyIndex],
+  );
+  if (hit) {
+    s.log.push(`${enemyName}의 역공! (${hit.source})`);
+    presentNext(s, [{ enemyIndex: hit.index, attack: hit.attack }, ...rest], deps);
+    return true;
+  }
+
   presentNext(s, rest, deps);
   return true;
+}
+
+// ── 역공 ────────────────────────────────────────
+//
+// design.md 확정: 역공을 쓴다. 특정 조건에서 몬스터가 일시적으로 턴을 뺏는다.
+//
+// ⚠️ **역공이 정확히 무엇을 하는가는 미정이다.** 아래는 가장 작은 구현 —
+//    해당 적이 자기 패턴의 첫 공격을 즉시 한 번 하고, 플레이어는 평소처럼
+//    리액티브 방어로 대응한다. "턴을 통째로 가져간다" 같은 다른 해석으로
+//    바꾸려면 counterAttackOf()와 아래 두 호출부만 고치면 된다.
+
+/** 역공으로 들어올 공격. 플레이스홀더: 그 적 패턴의 첫 공격. */
+function counterAttackOf(s: CombatState, enemyIndex: number): EnemyAttack | null {
+  const e = s.enemies[enemyIndex];
+  if (!e || e.hp <= 0) return null;
+  const def = getEnemy(e.defId);
+  return (def.pattern[e.patternIndex] ?? [])[0] ?? null;
+}
+
+/** 후보 중 역공이 터지는 첫 적을 찾는다. 한 번에 하나만 터진다 (중첩 미정). */
+function findCounter(
+  s: CombatState,
+  deps: CombatDeps,
+  trigger: CounterTrigger,
+  candidates: number[],
+): { index: number; source: string; attack: EnemyAttack } | null {
+  for (const i of candidates) {
+    const source = checkCounter(deps.run, s, deps.mods, deps.character, i, trigger);
+    if (!source) continue;
+    const attack = counterAttackOf(s, i);
+    if (attack) return { index: i, source, attack };
+  }
+  return null;
 }
 
 // ── 사이클 종료 ─────────────────────────────────
@@ -301,7 +372,9 @@ export function livingEnemies(s: CombatState): number[] {
 //   있으나 방식과 수치가 미정. onCycleStart 훅이 그 자리다.
 // - **방어 스킬을 미리 세팅하는 방식.** "방어 선택의 깊이" 2번 질문과 연동되어
 //   미정. 지금은 매 공격마다 전체에서 고르는 쪽으로만 만들었다.
-// - **역공 / 다이스 / 속성.** 전부 "미정 — 제작자 발의".
-//   역공이 들어오면 사이클 구조가 바뀌므로 훅 지점도 함께 손봐야 한다.
+// - **역공의 내용.** 역공을 쓴다는 것은 확정이지만, 조건이 어디에 붙는가
+//   (몹마다 / 캐릭터마다 / 둘 다)와 구체적인 조건, 역공이 정확히 무엇을
+//   하는가는 미정이다. 판정 자리와 끼어드는 흐름만 열어 두었다.
+// - **다이스 / 속성.** "미정 — 제작자 발의". 펌블 조건은 다이스에 의존한다.
 // - **상태이상(stacks의 내용물).** 그릇만 있고 비어 있다. 어떤 상태이상이
 //   있는지는 design.md에 한 줄도 없다.
