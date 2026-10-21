@@ -17,6 +17,7 @@ import {
 } from './systems/combat';
 import { bankResources, grantUpgrade, modifiersFor, selectInLine } from './systems/upgrades';
 import { findNode, isLastFloor, rollSkillChoices, rollUpgradeChoices, startRun } from './systems/run';
+import { nodeAt } from './systems/map';
 import { render, type UiState } from './ui/render';
 import { REST_HEAL_RATIO } from './tuning';
 
@@ -43,8 +44,9 @@ function afterCombat(run: RunState, combat: CombatState): GameState | null {
 
   if (combat.outcome === 'lose') return { screen: 'gameOver', run, won: false };
 
-  const node = run.currentNodeId ? findNode(run, run.currentNodeId) : undefined;
-  if (node?.kind === 'boss') return { screen: 'gameOver', run, won: true };
+  // 보스는 n층마다 나온다(확정). 런이 끝나는 것은 **마지막** 보스를 넘었을 때뿐이다.
+  const node = run.currentNodeId ? nodeAt(run.map, run.currentNodeId) : null;
+  if (node?.kind === 'boss' && isLastFloor(run)) return { screen: 'gameOver', run, won: true };
 
   return {
     screen: 'reward',
@@ -89,6 +91,7 @@ const actions: Record<string, (el: HTMLElement) => void> = {
     if (!node) return;
 
     run.currentNodeId = node.id;
+    run.visited.push(node.id);
     if (node.kind === 'rest') {
       game = { screen: 'rest', run };
       return;

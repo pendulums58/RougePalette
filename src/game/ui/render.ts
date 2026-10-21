@@ -2,6 +2,7 @@
 // CLAUDE.md 아키텍처 규칙: 렌더는 전체 다시 그리기, 이벤트는 위임만.
 
 import type { CombatState, GameState, MapNode, RunState, SkillId } from '../types';
+import { nodeAt, reachable, totalFloors } from '../systems/map';
 import { CHARACTERS, getCharacter } from '../data/characters';
 import { getEnemy } from '../data/enemies';
 import { getSkill } from '../data/skills';
@@ -126,23 +127,53 @@ function characterSelect(): string {
     </section>`;
 }
 
+const ROW_H = 68;
+
 function mapScreen(run: RunState): string {
-  const options = run.floors[run.floorIndex] ?? [];
-  const nodes = options
-    .map(
-      (n) => `
-      <button class="node node--${n.kind}" data-action="enterNode" data-id="${esc(n.id)}">
-        <span class="node__kind">${NODE_LABEL[n.kind]}</span>
-        <span class="node__detail">${n.enemies.length ? esc(enemyNames(n)) : '숨을 고른다'}</span>
-      </button>`,
+  const open = new Set(reachable(run.map, run.floorIndex, run.currentNodeId));
+  const visited = new Set(run.visited);
+  const floors = run.map.floors.length;
+  const w = run.map.width;
+
+  // 좌표: floor 0이 맨 아래. SVG는 viewBox를 (폭 × 층수)로 두고 비율로 늘린다.
+  const vx = (col: number) => col + 0.5;
+  const vy = (floor: number) => floors - floor - 0.5;
+
+  const edges = Object.values(run.map.nodes)
+    .flatMap((n) =>
+      n.next.map((id) => {
+        const to = nodeAt(run.map, id);
+        const lit = visited.has(n.id) && (open.has(id) || visited.has(id));
+        return `<line class="map__edge ${lit ? 'map__edge--open' : ''}"
+          x1="${vx(n.col)}" y1="${vy(n.floor)}" x2="${vx(to.col)}" y2="${vy(to.floor)}"
+          vector-effect="non-scaling-stroke" />`;
+      }),
     )
+    .join('');
+
+  const nodes = Object.values(run.map.nodes)
+    .map((n) => {
+      const isOpen = open.has(n.id);
+      const state = isOpen ? 'mapnode--open' : visited.has(n.id) ? 'mapnode--visited' : '';
+      const detail = n.enemies.length ? esc(enemyNames(n)) : '휴식';
+      return `
+      <button class="mapnode mapnode--${n.kind} ${state}"
+        style="left:${((n.col + 0.5) / w) * 100}%;bottom:${((n.floor + 0.5) / floors) * 100}%"
+        data-action="enterNode" data-id="${esc(n.id)}" ${isOpen ? '' : 'disabled'}>
+        <span class="mapnode__kind">${NODE_LABEL[n.kind]}</span>
+        <span class="mapnode__detail">${detail}</span>
+      </button>`;
+    })
     .join('');
 
   return `
     <section class="screen">
       ${runHeader(run)}
-      <h2 class="heading">${run.floorIndex + 1}층 / ${run.floors.length}층</h2>
-      <div class="node-row">${nodes}</div>
+      <h2 class="heading">${run.floorIndex + 1}층 / ${totalFloors()}층</h2>
+      <div class="map" style="height:${floors * ROW_H}px">
+        <svg class="map__edges" viewBox="0 0 ${w} ${floors}" preserveAspectRatio="none">${edges}</svg>
+        ${nodes}
+      </div>
       ${activeUpgradeChips(run)}
       <button class="btn" data-action="toAllocate" data-from="map">자원 배분</button>
       ${skillList(run)}
@@ -152,7 +183,7 @@ function mapScreen(run: RunState): string {
 function enemyNames(n: MapNode): string {
   const counted = new Map<string, number>();
   for (const id of n.enemies) counted.set(id, (counted.get(id) ?? 0) + 1);
-  return [...counted].map(([id, c]) => (c > 1 ? `${getEnemy(id).name} ×${c}` : getEnemy(id).name)).join(', ');
+  return [...counted].map(([id, c]) => (c > 1 ? `${getEnemy(id).name}×${c}` : getEnemy(id).name)).join(',');
 }
 
 // ── 전투 ────────────────────────────────────────

@@ -9,14 +9,12 @@
 // ⚠️ 맵 구조 자체(층 수, 분기 개수, 정예 노드의 존재)는 design.md에 없다.
 //    아래는 전부 플레이스홀더이며, 맵을 제대로 설계하면 갈아끼우는 자리다.
 
-import type { CharacterDef, MapNode, NodeKind, RunState, SkillId, UpgradeId } from '../types';
+import type { CharacterDef, RunState, SkillId, UpgradeId } from '../types';
 import { Rng } from './rng';
 import { newUpgradeState, alreadyGranted } from './upgrades';
 import { grantPool } from '../data/upgrades';
-import { FLOORS_BEFORE_BOSS, REST_INTERVAL, SKILL_CHOICES, UPGRADE_CHOICES } from '../tuning';
-
-const NORMAL_POOLS: string[][] = [['husk'], ['swarm', 'swarm'], ['husk', 'swarm']];
-const ELITE_POOLS: string[][] = [['sentinel'], ['sentinel', 'swarm']];
+import { generateMap, nodeAt, reachable, totalFloors } from './map';
+import { SKILL_CHOICES, UPGRADE_CHOICES } from '../tuning';
 
 export function startRun(character: CharacterDef, seed: number): RunState {
   const rng = new Rng(seed);
@@ -26,50 +24,25 @@ export function startRun(character: CharacterDef, seed: number): RunState {
     hp: character.maxHp,
     maxHp: character.maxHp,
     skills: [...character.startingSkills],
-    floors: generateFloors(rng),
+    map: generateMap(rng),
     floorIndex: 0,
     currentNodeId: null,
+    visited: [],
     upgrades: newUpgradeState(character.grid),
   };
 }
 
-export function generateFloors(rng: Rng): MapNode[][] {
-  const floors: MapNode[][] = [];
-
-  for (let i = 0; i < FLOORS_BEFORE_BOSS; i++) {
-    // 휴식 지점은 n층마다 (확정 구조, n은 플레이스홀더)
-    if (i > 0 && (i + 1) % REST_INTERVAL === 0) {
-      floors.push([{ id: `f${i}-rest`, kind: 'rest', enemies: [] }]);
-      continue;
-    }
-
-    const count = i === 0 ? 1 : 2;
-    const options: MapNode[] = [];
-    for (let j = 0; j < count; j++) {
-      const kind: NodeKind = i >= 3 && rng.next() < 0.3 ? 'elite' : 'combat';
-      options.push({
-        id: `f${i}-${j}`,
-        kind,
-        enemies: rng.pick(kind === 'elite' ? ELITE_POOLS : NORMAL_POOLS),
-      });
-    }
-    floors.push(options);
-  }
-
-  floors.push([{ id: 'boss', kind: 'boss', enemies: ['warden'] }]);
-  return floors;
+/** 지금 층에서 고를 수 있는 노드들 (직전 노드에서 이어지는 것만). */
+export function choices(run: RunState) {
+  return reachable(run.map, run.floorIndex, run.currentNodeId).map((id) => nodeAt(run.map, id));
 }
 
-export function currentFloor(run: RunState): MapNode[] {
-  return run.floors[run.floorIndex] ?? [];
-}
-
-export function findNode(run: RunState, id: string): MapNode | undefined {
-  return currentFloor(run).find((n) => n.id === id);
+export function findNode(run: RunState, id: string) {
+  return choices(run).find((n) => n.id === id);
 }
 
 export function isLastFloor(run: RunState): boolean {
-  return run.floorIndex >= run.floors.length - 1;
+  return run.floorIndex >= totalFloors() - 1;
 }
 
 // ── 보상 추첨 ───────────────────────────────────

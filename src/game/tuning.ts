@@ -12,8 +12,25 @@ export const UNGUARDED_MULT = 1.5;
 /** 확정 규칙: 사이클 중 행동할 때마다 과부하가 1씩 쌓인다. */
 export const OVERLOAD_PER_ACTION = 1;
 
-/** 보스 전까지의 층 수. design.md: 휴식 지점 간격(n) 미정 */
-export const FLOORS_BEFORE_BOSS = 7;
+// ── 맵 ──────────────────────────────────────────
+//
+// design.md 확정: n층마다 휴식 확정 / n층마다 보스 확정. 알고리즘 기반 무작위 생성.
+// 아래 n 값들과 폭·갈래 수는 전부 미정이다.
+
+/** 휴식 지점이 확정으로 등장하는 간격. 제작자 발의: 난이도마다 다르게 할 수도 있다 */
+export const REST_EVERY = 3;
+
+/** 보스가 확정으로 등장하는 간격 */
+export const BOSS_EVERY = 8;
+
+/** 보스를 몇 번 지나면 런이 끝나는가. 1막/2막/3막 구조를 쓸지는 미정 */
+export const BOSS_COUNT = 2;
+
+/** 한 층의 최대 갈래 수 */
+export const MAP_WIDTH = 5;
+
+/** 생성 시 바닥에서 꼭대기까지 긋는 경로 수. 많을수록 맵이 빽빽해진다 */
+export const MAP_PATHS = 6;
 
 /** 전투 보상으로 제시할 스킬 후보 수 */
 export const SKILL_CHOICES = 3;
@@ -23,9 +40,3 @@ export const UPGRADE_CHOICES = 3;
 
 /** 휴식에서 회복하는 최대 체력 비율 */
 export const REST_HEAL_RATIO = 0.3;
-
-/**
- * 휴식 지점 간격. design.md 용어표는 휴식 지점을 "n층마다 있는 지점"이라고
- * 정의했지만 n은 미정이다.
- */
-export const REST_INTERVAL = 3;

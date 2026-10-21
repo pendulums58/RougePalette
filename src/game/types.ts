@@ -257,11 +257,32 @@ export interface CombatState {
 
 export type NodeKind = 'combat' | 'elite' | 'rest' | 'boss';
 
+/**
+ * 맵의 노드 하나.
+ *
+ * design.md 확정: 맵은 알고리즘으로 매 런 무작위 생성되고, STS처럼 **올라가는
+ * 분기 구조가 화면에 보여야 한다.** 그래서 노드는 좌표(floor, col)와 간선(next)을
+ * 들고 있다 — 층마다 독립된 선택지 목록이 아니라 진짜 그래프다.
+ */
 export interface MapNode {
   id: NodeId;
   kind: NodeKind;
+  /** 0이 맨 아래(시작 층). 화면에서는 아래에서 위로 올라간다 */
+  floor: number;
+  /** 가로 위치 (0 .. width-1). 레이아웃과 생성 알고리즘이 함께 쓴다 */
+  col: number;
   /** 이 노드에서 등장할 적 def id들. 휴식이면 빈 배열 */
   enemies: EnemyId[];
+  /** 다음 층에서 갈 수 있는 노드들. 맨 윗층이면 빈 배열 */
+  next: NodeId[];
+}
+
+export interface GameMap {
+  /** 한 층의 최대 갈래 수 (미정 — 플레이스홀더) */
+  width: number;
+  /** 층별 노드 id. floors[0]이 시작 층 */
+  floors: NodeId[][];
+  nodes: Record<NodeId, MapNode>;
 }
 
 export interface RunState {
@@ -271,10 +292,12 @@ export interface RunState {
   maxHp: number;
   /** 보유 스킬 */
   skills: SkillId[];
-  /** 층마다 고를 수 있는 노드 후보들 */
-  floors: MapNode[][];
+  map: GameMap;
   floorIndex: number;
+  /** 마지막으로 들어간 노드. null이면 아직 시작 층을 고르지 않았다 */
   currentNodeId: NodeId | null;
+  /** 이미 지나온 노드들 (화면에 경로를 보여주기 위해) */
+  visited: NodeId[];
   upgrades: UpgradeState;
 }
 
