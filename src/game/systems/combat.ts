@@ -8,6 +8,10 @@
 // - 턴 순서: 진영 단위 (자신 턴 종료 -> 적 턴)
 // - 전투 내부에 무작위 요소는 없다
 //
+// 효과는 두 종류로 나뉜다 (types.ts 참조):
+//   값 질의 -> deps.mods (CombatModifiers)
+//   반응   -> fire(...)로 훅 발화. 아래 ★ 표시가 훅 지점이다
+//
 // 미정이라 구현하지 않은 것은 파일 하단 참조.
 
 import type {
@@ -18,11 +22,28 @@ import type {
   EnemyAttack,
   EnemyId,
   Mitigation,
+  RunState,
   SkillDef,
 } from '../types';
 import { emptyPolarityCount } from '../types';
 import { getEnemy } from '../data/enemies';
-import { awardResources } from './upgrades';
+import { getCharacter } from '../data/characters';
+import { awardResources, modifiersFor } from './upgrades';
+import { fire } from './hooks';
+
+/**
+ * 전투 로직이 필요로 하는 것들. 인자를 길게 늘어놓는 대신 하나로 묶는다.
+ * mods는 전투 중에 바뀌지 않는다 (확정: 포션·강화는 전투 시작 시 적용).
+ */
+export interface CombatDeps {
+  run: RunState;
+  character: CharacterDef;
+  mods: CombatModifiers;
+}
+
+export function depsFor(run: RunState): CombatDeps {
+  return { run, character: getCharacter(run.characterId), mods: modifiersFor(run) };
+}
 
 // ── 코스트 ──────────────────────────────────────
 
@@ -53,15 +74,9 @@ export function unguardedDamage(raw: number, mods: CombatModifiers): number {
 
 // ── 전투 시작 ───────────────────────────────────
 
-export function startCombat(
-  character: CharacterDef,
-  enemyIds: EnemyId[],
-  hp: number,
-  maxHp: number,
-  mods: CombatModifiers,
-): CombatState {
-  const maxNotes = Math.max(1, character.notes + mods.notes);
-  return {
+export function startCombat(enemyIds: EnemyId[], hp: number, maxHp: number, deps: CombatDeps): CombatState {
+  const maxNotes = Math.max(1, deps.character.notes + deps.mods.notes);
+  const s: CombatState = {
     cycle: 1,
     phase: 'player',
     player: { hp, maxHp, notes: maxNotes, maxNotes, overload: 0 },
@@ -72,8 +87,13 @@ export function startCombat(
     pending: null,
     outcome: null,
     earned: emptyPolarityCount(),
+    stacks: {},
     log: ['1사이클 시작.'],
   };
+
+  fire(deps.run, s, deps.mods, 'onCombatStart', {}); // ★
+  fire(deps.run, s, deps.mods, 'onCycleStart', { cycle: 1 }); // ★
+  return s;
 }
 
 // ── 플레이어 턴 ─────────────────────────────────
@@ -86,8 +106,7 @@ export function useAction(
   s: CombatState,
   skill: SkillDef,
   targetIndex: number,
-  mods: CombatModifiers,
-  character: CharacterDef,
+  deps: CombatDeps,
 ): boolean {
   if (s.phase !== 'player' || skill.kind !== 'action' || !canUse(s, skill)) return false;
 
@@ -97,24 +116,31 @@ export function useAction(
   const cost = skillCost(s, skill);
   s.player.notes -= cost;
 
-  const dmg = Math.max(0, (skill.damage ?? 0) + mods.damage);
+  const dmg = Math.max(0, (skill.damage ?? 0) + deps.mods.damage);
   const targets = skill.hitsAll ? living : [living.includes(targetIndex) ? targetIndex : living[0]!];
+  const defeated: number[] = [];
   for (const i of targets) {
     const e = s.enemies[i]!;
     e.hp = Math.max(0, e.hp - dmg);
+    if (e.hp <= 0) defeated.push(i);
   }
   s.log.push(`${skill.name} (노트 ${cost}) → 피해 ${dmg}${skill.hitsAll ? ' (전체)' : ''}.`);
 
   // 확정: 사이클 중 행동할 때마다 과부하가 쌓인다
-  s.player.overload += mods.overloadPerAction;
+  s.player.overload += deps.mods.overloadPerAction;
 
-  emit(s, { kind: 'action', skillId: skill.id }, character);
+  emit(s, { kind: 'action', skillId: skill.id }, deps.character);
+  fire(deps.run, s, deps.mods, 'onAction', { skillId: skill.id, cost, damageDealt: dmg * targets.length }); // ★
+  for (const enemyIndex of defeated) {
+    fire(deps.run, s, deps.mods, 'onEnemyDefeated', { enemyIndex }); // ★
+  }
+
   checkOutcome(s);
   return true;
 }
 
 /** 턴 종료 -> 적 턴. 확정: 진영 단위 */
-export function endPlayerTurn(s: CombatState, character: CharacterDef): void {
+export function endPlayerTurn(s: CombatState, deps: CombatDeps): void {
   if (s.phase !== 'player') return;
 
   const queue: Array<{ enemyIndex: number; attack: EnemyAttack }> = [];
@@ -125,7 +151,7 @@ export function endPlayerTurn(s: CombatState, character: CharacterDef): void {
   });
 
   s.log.push('턴 종료. 적 턴.');
-  presentNext(s, queue, character);
+  presentNext(s, queue, deps);
 }
 
 // ── 적 턴 / 리액티브 방어 ───────────────────────
@@ -133,12 +159,12 @@ export function endPlayerTurn(s: CombatState, character: CharacterDef): void {
 function presentNext(
   s: CombatState,
   queue: Array<{ enemyIndex: number; attack: EnemyAttack }>,
-  character: CharacterDef,
+  deps: CombatDeps,
 ): void {
   // 이미 쓰러진 적의 공격은 건너뛴다
   const next = queue.findIndex((q) => s.enemies[q.enemyIndex]!.hp > 0);
   if (next === -1) {
-    endCycle(s, character);
+    endCycle(s, deps);
     return;
   }
   const head = queue[next]!;
@@ -150,12 +176,7 @@ function presentNext(
  * 리액티브 방어 결정.
  * @param skill 방어 스킬, 또는 null(= 방어 안 함 선언 -> 무방비)
  */
-export function resolveDefense(
-  s: CombatState,
-  skill: SkillDef | null,
-  mods: CombatModifiers,
-  character: CharacterDef,
-): boolean {
+export function resolveDefense(s: CombatState, skill: SkillDef | null, deps: CombatDeps): boolean {
   if (s.phase !== 'defend' || !s.pending) return false;
 
   const { attack, enemyIndex, rest } = s.pending;
@@ -164,21 +185,24 @@ export function resolveDefense(
   let event: CombatEvent;
 
   if (skill === null) {
-    taken = unguardedDamage(attack.damage, mods);
+    taken = unguardedDamage(attack.damage, deps.mods);
     event = { kind: 'unguarded', raw: attack.damage, taken };
     s.log.push(`${enemyName}의 ${attack.name} · 무방비 → 피해 ${taken}.`);
   } else {
     if (skill.kind !== 'defense' || !skill.mitigation || !canUse(s, skill)) return false;
     const cost = skillCost(s, skill);
     s.player.notes -= cost;
-    taken = mitigatedDamage(attack.damage, skill.mitigation, mods.mitigation);
+    taken = mitigatedDamage(attack.damage, skill.mitigation, deps.mods.mitigation);
     event = { kind: 'defended', skillId: skill.id, raw: attack.damage, taken };
     s.log.push(`${enemyName}의 ${attack.name} · ${skill.name} (노트 ${cost}) → 피해 ${taken}.`);
   }
 
   s.player.hp = Math.max(0, s.player.hp - taken);
   s.pending = null;
-  emit(s, event, character);
+  emit(s, event, deps.character);
+
+  fire(deps.run, s, deps.mods, 'onDefend', { skillId: skill?.id ?? null, raw: attack.damage, taken }); // ★
+  if (taken > 0) fire(deps.run, s, deps.mods, 'onDamaged', { amount: taken }); // ★
 
   if (s.player.hp <= 0) {
     s.outcome = 'lose';
@@ -187,14 +211,19 @@ export function resolveDefense(
     return true;
   }
 
-  presentNext(s, rest, character);
+  presentNext(s, rest, deps);
   return true;
 }
 
 // ── 사이클 종료 ─────────────────────────────────
 
-function endCycle(s: CombatState, character: CharacterDef): void {
-  emit(s, { kind: 'cycleEnd', notesLeft: s.player.notes, overload: s.player.overload }, character);
+function endCycle(s: CombatState, deps: CombatDeps): void {
+  emit(s, { kind: 'cycleEnd', notesLeft: s.player.notes, overload: s.player.overload }, deps.character);
+  fire(deps.run, s, deps.mods, 'onCycleEnd', {
+    cycle: s.cycle,
+    notesLeft: s.player.notes,
+    overload: s.player.overload,
+  }); // ★
 
   for (const e of s.enemies) {
     if (e.hp <= 0) continue;
@@ -209,6 +238,8 @@ function endCycle(s: CombatState, character: CharacterDef): void {
   s.pending = null;
   s.phase = 'player';
   s.log.push(`${s.cycle}사이클 시작. 노트 리필, 과부하 초기화.`);
+
+  fire(deps.run, s, deps.mods, 'onCycleStart', { cycle: s.cycle }); // ★
 }
 
 // ── 공통 ────────────────────────────────────────
@@ -235,7 +266,10 @@ export function livingEnemies(s: CombatState): number[] {
 //   관찰은 design.md의 "검토 중인 제안(AI)" 구획에 있고 확정이 아니다.
 //   적은 공격만 한다.
 // - **안티스톨** (사이클이 길어질수록 적이 강해지는 방식). 제작자가 기울어
-//   있으나 방식과 수치가 미정.
+//   있으나 방식과 수치가 미정. onCycleStart 훅이 그 자리다.
 // - **방어 스킬을 미리 세팅하는 방식.** "방어 선택의 깊이" 2번 질문과 연동되어
 //   미정. 지금은 매 공격마다 전체에서 고르는 쪽으로만 만들었다.
 // - **역공 / 다이스 / 속성.** 전부 "미정 — 제작자 발의".
+//   역공이 들어오면 사이클 구조가 바뀌므로 훅 지점도 함께 손봐야 한다.
+// - **상태이상(stacks의 내용물).** 그릇만 있고 비어 있다. 어떤 상태이상이
+//   있는지는 design.md에 한 줄도 없다.

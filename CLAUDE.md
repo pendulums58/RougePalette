@@ -61,6 +61,7 @@ src/
     systems/
       rng.ts         시드 난수 (mulberry32)
       combat.ts      턴 노트 전투
+      hooks.ts       ★ 효과 반응 디스패처
       potions.ts     포션 지속·스택
       map.ts         맵 생성 (알고리즘 기반 랜덤 그래프)
       run.ts         런 진행, 보상 추첨
@@ -99,6 +100,63 @@ src/
 
 새 *종류*를 만들 때도 `registry.ts` 상단의 틀을 복사하면 된다.
 이벤트도 형태가 확정되면 같은 자리에 `data/events.ts`로 들어간다.
+
+## 효과 시스템 — 두 종류를 섞지 말 것
+
+효과에는 메커니즘이 다른 **두 종류**가 있다.
+
+| 종류 | 예 | 메커니즘 | 어디에 |
+|---|---|---|---|
+| **값 질의** | "피해 +3" | 특정 시점에 **물어본다** | `CombatModifiers` · `modifiersFor()` |
+| **반응** | "적을 쓰러뜨리면 노트 환급" | 사건이 터질 때 **발화한다** | `EffectHooks` · `fire()` |
+
+값 질의로 표현되는 것을 훅으로 만들면 순서에 의존하게 되고, 반응을 값으로
+만들려 하면 아예 표현이 안 된다. 새 효과를 만들 때 어느 쪽인지부터 정할 것.
+
+### 훅 지점
+
+여기 없는 시점에는 반응을 걸 수 없다. `systems/combat.ts`에서 `★` 주석이 발화 지점이다.
+
+| 훅 | 언제 | 받는 것 |
+|---|---|---|
+| `onCombatStart` | 전투 시작 | — |
+| `onCycleStart` | 사이클 시작 (1사이클 포함) | `cycle` |
+| `onCycleEnd` | 사이클 종료 (노트 리필 전) | `cycle`, `notesLeft`, `overload` |
+| `onAction` | 행동 스킬 사용 후 | `skillId`, `cost`, `damageDealt` |
+| `onDefend` | 방어 결정 후 (무방비 포함) | `skillId`(null이면 무방비), `raw`, `taken` |
+| `onDamaged` | 실제로 피해를 받았을 때 | `amount` |
+| `onEnemyDefeated` | 적이 쓰러졌을 때 | `enemyIndex` |
+
+### 설계 의도 세 가지
+
+1. **훅 지점을 타입으로 못박는다.** 무차별 브로드캐스트(모든 객체의 `OnX()`를
+   부르는 식)를 쓰지 않는다 — 어디에 무엇이 걸려 있는지 코드에서 안 보이게 된다.
+2. **발화 순서를 명시한다.** `collectHooks()`의 순서가 곧 발화 순서다
+   (강화 → 포션, 포션은 스택된 만큼 각각). 순서가 암묵적이면 "노트 +1"과
+   "노트 2배"가 같은 훅에 걸렸을 때 결과가 등록 순서에 따라 달라진다.
+3. **반응이 할 수 있는 일을 좁힌다.** 상태를 통째로 넘기지 않고 `HookApi`만 준다
+   (`refundNotes` / `reduceOverload` / `addStack` / `getStack` / `log`).
+   `log()`는 출처를 자동으로 붙여서 `[역류] 노트 1 환급.` 처럼 남는다.
+
+### 효과를 추가하는 법
+
+```ts
+// 값으로 되는 것 -> modifiers
+{ id: 'x', ..., modifiers: { damage: 3 } }
+
+// 사건에 반응해야 하는 것 -> hooks
+{ id: 'y', ..., modifiers: {}, hooks: {
+    onEnemyDefeated(api) { api.refundNotes(1); api.log('노트 1 환급.'); },
+} }
+```
+
+### 아직 비어 있는 것
+
+- **`CombatState.stacks`는 그릇만 있다.** 어떤 상태이상이 있는지는 **설계 결정**이고
+  `design.md`에 한 줄도 없다. 임의로 채우지 말 것.
+- **역공이 확정되면 훅 지점을 다시 봐야 한다.** 사이클 구조 자체가 바뀐다.
+- 지금 훅을 쓰는 콘텐츠는 **역류**(강화)와 **메아리 물약** 둘뿐이고, 인프라가
+  끝까지 도는지 보여주려고 넣은 플레이스홀더다.
 
 ## 아키텍처 규칙
 
@@ -166,7 +224,8 @@ src/
 | 방어 스킬 사전 세팅 | 매번 전체에서 선택 | `ui/render.ts`의 `defendView()` |
 | 역공 / 다이스 / 속성 | 없음 | — |
 | 휴식 지점의 다른 선택지 | HP 회복만 | `ui/render.ts`의 `restScreen()` |
-| 강화 효과의 종류 | 확정 규칙이 정의한 수치만 | `types.ts`의 `CombatModifiers` |
+| 강화 효과의 종류 | 값 질의 + 반응 훅 둘 다 가능 | `types.ts`의 `CombatModifiers` / `EffectHooks` |
+| 상태이상 (stacks의 내용물) | 그릇만 있고 비어 있음 | `types.ts`의 `CombatState.stacks` |
 | 1막/2막/3막 구조를 쓸 것인가 | 보스 구간만 있고 막 개념 없음 | `systems/map.ts` |
 | 휴식·보스 간격(n), 맵 폭, 총 층 수 | 플레이스홀더 | `game/tuning.ts` |
 | 난이도별 휴식 간격 (제작자 발의) | 난이도 시스템 자체가 없음 | — |

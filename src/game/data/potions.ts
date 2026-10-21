@@ -48,6 +48,27 @@ const POTIONS: PotionDef[] = [
     modifiers: { unguardedMult: -0.25 },
   },
   {
+    // 훅(반응)을 쓰는 예. 값 질의로는 표현할 수 없는 효과다.
+    id: 'brew_echo',
+    name: '메아리 물약',
+    text: '피해를 받을 때마다 쌓이고, 2번 쌓이면 사이클 끝에 노트 1을 돌려준다.',
+    floors: 3,
+    price: 45,
+    modifiers: {},
+    hooks: {
+      onDamaged(api) {
+        api.addStack('echo', 1);
+      },
+      onCycleEnd(api) {
+        if (api.getStack('echo') >= 2) {
+          api.addStack('echo', -api.getStack('echo'));
+          api.refundNotes(1);
+          api.log('메아리가 노트 1을 돌려준다.');
+        }
+      },
+    },
+  },
+  {
     id: 'brew_surge',
     name: '격류 물약',
     text: '피해 +8. 짧게 간다.',
@@ -60,7 +81,8 @@ const POTIONS: PotionDef[] = [
 export const Potions = defineRegistry('포션', POTIONS, (p) => {
   if (p.floors < 1) return 'floors는 1 이상이어야 한다 (최소 한 층은 지속)';
   if (p.price < 0) return 'price는 0 이상이어야 한다';
-  if (Object.keys(p.modifiers).length === 0) return 'modifiers가 비어 있다 — 아무 효과도 없는 포션';
+  if (Object.keys(p.modifiers).length === 0 && !p.hooks)
+    return 'modifiers도 hooks도 없다 — 아무 효과도 없는 포션';
   return null;
 });
 

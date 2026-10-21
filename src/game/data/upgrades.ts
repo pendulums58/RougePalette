@@ -62,6 +62,21 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'drop_bracer', name: '낡은 완갑', polarity: 'positive', cost: 0, text: '방어 경감 +4.', modifiers: { mitigation: 4 } },
   { id: 'drop_breath', name: '두 번째 숨', polarity: 'positive', cost: 0, text: '사이클당 턴 노트 +1.', modifiers: { notes: 1 } },
   { id: 'drop_gamble', name: '깨진 저울', polarity: 'negative', cost: 0, text: '피해 +7. 무방비로 받는 피해가 늘어난다.', modifiers: { damage: 7, unguardedMult: 0.4 } },
+  // 훅(반응)을 쓰는 예. 적을 쓰러뜨릴 때 반응하므로 값 질의로는 표현할 수 없다.
+  {
+    id: 'drop_backdraft',
+    name: '역류',
+    polarity: 'negative',
+    cost: 0,
+    text: '적을 쓰러뜨리면 턴 노트 1을 돌려받는다. 무방비로 받는 피해가 늘어난다.',
+    modifiers: { unguardedMult: 0.3 },
+    hooks: {
+      onEnemyDefeated(api) {
+        api.refundNotes(1);
+        api.log('역류 — 노트 1 환급.');
+      },
+    },
+  },
 ];
 
 /**
@@ -79,7 +94,7 @@ const WORSE_WHEN: Record<keyof CombatModifiers, 'negative' | 'positive'> = {
 export const Upgrades = defineRegistry('강화', UPGRADES, (u) => {
   if (u.cost < 0) return 'cost는 0 이상이어야 한다';
   const keys = Object.keys(u.modifiers) as Array<keyof CombatModifiers>;
-  if (keys.length === 0) return 'modifiers가 비어 있다 — 아무 효과도 없는 강화';
+  if (keys.length === 0 && !u.hooks) return 'modifiers도 hooks도 없다 — 아무 효과도 없는 강화';
 
   // 확정: 긍정 = 순수 메리트. 디메리트가 섞이면 안 된다.
   if (u.polarity === 'positive') {

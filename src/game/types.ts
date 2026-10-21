@@ -128,6 +128,8 @@ export interface UpgradeDef {
   cost: number;
   text: string;
   modifiers: Partial<CombatModifiers>;
+  /** 값 질의로 표현할 수 없는 반응. 없으면 생략한다 */
+  hooks?: EffectHooks;
 }
 
 /**
@@ -169,6 +171,65 @@ export interface UpgradeState {
   resources: PolarityCount;
 }
 
+// ── 효과 훅 ─────────────────────────────────────
+//
+// 효과에는 **두 종류**가 있고 메커니즘이 다르다. 섞지 말 것.
+//
+//   1. **값 질의** — "피해 +3". 특정 시점에 물어본다. -> CombatModifiers
+//   2. **반응**   — "방어에 성공하면 노트를 돌려준다". 사건이 터질 때 발화한다. -> EffectHooks
+//
+// 아래는 2번이다. 1번은 그대로 두고 옆에 붙인다.
+
+/** 반응이 걸릴 수 있는 지점. 여기 없는 시점에는 반응을 걸 수 없다. */
+export type HookName =
+  | 'onCombatStart'
+  | 'onCycleStart'
+  | 'onCycleEnd'
+  | 'onAction'
+  | 'onDefend'
+  | 'onDamaged'
+  | 'onEnemyDefeated';
+
+/** 각 훅이 받는 사건 정보. */
+export interface HookPayloads {
+  onCombatStart: Record<string, never>;
+  onCycleStart: { cycle: number };
+  onCycleEnd: { cycle: number; notesLeft: number; overload: number };
+  onAction: { skillId: SkillId; cost: number; damageDealt: number };
+  /** skillId가 null이면 무방비 선언 */
+  onDefend: { skillId: SkillId | null; raw: number; taken: number };
+  onDamaged: { amount: number };
+  onEnemyDefeated: { enemyIndex: number };
+}
+
+/**
+ * 반응이 할 수 있는 일. **좁은 API로 한정한다.**
+ * 상태를 통째로 넘기면 무엇이든 할 수 있게 되어 추적이 불가능해진다.
+ */
+export interface HookApi {
+  /** 지금 전투 상태 (읽기용으로 쓸 것) */
+  readonly combat: CombatState;
+  /** 이번 전투의 최종 수치 (읽기용) */
+  readonly mods: CombatModifiers;
+  /** 턴 노트를 돌려준다. maxNotes를 넘지 않는다 */
+  refundNotes(n: number): void;
+  /** 과부하를 깎는다. 0 밑으로는 안 내려간다 */
+  reduceOverload(n: number): void;
+  /** 전투 중 카운터를 올린다 */
+  addStack(key: string, amount: number): void;
+  /** 전투 중 카운터를 읽는다 */
+  getStack(key: string): number;
+  /** 로그 한 줄. 왜 그렇게 됐는지 보이게 하려고 */
+  log(message: string): void;
+}
+
+export type HookFn<K extends HookName> = (api: HookApi, payload: HookPayloads[K]) => void;
+
+/** 강화·포션·(나중에) 전승이 선택적으로 가지는 반응 묶음. */
+export type EffectHooks = {
+  [K in HookName]?: HookFn<K>;
+};
+
 // ── 포션 ────────────────────────────────────────
 
 /**
@@ -191,6 +252,8 @@ export interface PotionDef {
   price: number;
   /** 전투 시작 시 더해지는 값. 스택되면 개수만큼 더해진다 */
   modifiers: Partial<CombatModifiers>;
+  /** 값 질의로 표현할 수 없는 반응. 스택된 개수만큼 발화한다 */
+  hooks?: EffectHooks;
 }
 
 /** 지금 몸에 걸려 있는 포션 하나. 같은 id가 여러 개면 그만큼 스택된다. */
@@ -290,6 +353,13 @@ export interface CombatState {
   outcome: 'win' | 'lose' | null;
   /** 이번 전투에서 적립한 자원. 전투가 끝나면 런으로 넘어간다 */
   earned: PolarityCount;
+  /**
+   * 전투 중에만 존재하는 카운터. 반응 효과들이 읽고 쓴다. 전투가 끝나면 사라진다.
+   *
+   * ⚠️ 그릇만 있고 내용은 비어 있다. **어떤 상태이상이 있는지는 설계 결정**이고
+   * design.md에 아직 한 줄도 없다. 임의로 채우지 말 것.
+   */
+  stacks: Record<string, number>;
   log: string[];
 }
 

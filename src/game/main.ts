@@ -9,13 +9,14 @@ import { getCharacter } from './data/characters';
 import { getSkill } from './data/skills';
 import { Rng, randomSeed } from './systems/rng';
 import {
+  depsFor,
   endPlayerTurn,
   livingEnemies,
   resolveDefense,
   startCombat,
   useAction,
 } from './systems/combat';
-import { bankResources, grantUpgrade, modifiersFor, selectInLine } from './systems/upgrades';
+import { bankResources, grantUpgrade, selectInLine } from './systems/upgrades';
 import { addPotion, tickPotions } from './systems/potions';
 import {
   findNode,
@@ -113,7 +114,7 @@ const actions: Record<string, (el: HTMLElement) => void> = {
     game = {
       screen: 'combat',
       run,
-      combat: startCombat(getCharacter(run.characterId), node.enemies, run.hp, run.maxHp, modifiersFor(run)),
+      combat: startCombat(node.enemies, run.hp, run.maxHp, depsFor(run)),
     };
   },
 
@@ -127,7 +128,7 @@ const actions: Record<string, (el: HTMLElement) => void> = {
 
     // 대상을 고를 필요가 없으면 바로 쓴다
     if (skill.hitsAll || living.length <= 1) {
-      useAction(combat, skill, living[0] ?? 0, modifiersFor(run), getCharacter(run.characterId));
+      useAction(combat, skill, living[0] ?? 0, depsFor(run));
       settle(run, combat);
       return;
     }
@@ -137,20 +138,14 @@ const actions: Record<string, (el: HTMLElement) => void> = {
   pickTarget(el) {
     if (game.screen !== 'combat' || ui.pendingSkillId === null) return;
     const { run, combat } = game;
-    useAction(
-      combat,
-      getSkill(ui.pendingSkillId),
-      Number(el.dataset.index),
-      modifiersFor(run),
-      getCharacter(run.characterId),
-    );
+    useAction(combat, getSkill(ui.pendingSkillId), Number(el.dataset.index), depsFor(run));
     settle(run, combat);
   },
 
   endTurn() {
     if (game.screen !== 'combat') return;
     const { run, combat } = game;
-    endPlayerTurn(combat, getCharacter(run.characterId));
+    endPlayerTurn(combat, depsFor(run));
     settle(run, combat);
   },
 
@@ -158,12 +153,7 @@ const actions: Record<string, (el: HTMLElement) => void> = {
     if (game.screen !== 'combat') return;
     const { run, combat } = game;
     const id = el.dataset.id ?? '';
-    resolveDefense(
-      combat,
-      id === '' ? null : getSkill(id),
-      modifiersFor(run),
-      getCharacter(run.characterId),
-    );
+    resolveDefense(combat, id === '' ? null : getSkill(id), depsFor(run));
     settle(run, combat);
   },
 
