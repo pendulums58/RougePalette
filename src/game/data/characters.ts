@@ -9,6 +9,7 @@
 // 아래 둘은 "턴 노트 수치가 다른 캐릭터 둘"이라는 확정 규칙을 돌려보기 위한 더미다.
 
 import type { CharacterDef } from '../types';
+import { assertGridValid, buildGrid } from './upgrades';
 
 export const CHARACTERS: CharacterDef[] = [
   {
@@ -25,6 +26,7 @@ export const CHARACTERS: CharacterDef[] = [
       { polarity: 'positive', trigger: { on: 'fullyBlocked' }, amount: 1 },
       { polarity: 'negative', trigger: { on: 'tookUnguarded' }, amount: 1 },
     ],
+    grid: buildGrid('heir'),
   },
   {
     id: 'observer',
@@ -40,8 +42,12 @@ export const CHARACTERS: CharacterDef[] = [
       { polarity: 'positive', trigger: { on: 'cycleEndedEmpty' }, amount: 1 },
       { polarity: 'negative', trigger: { on: 'tookUnguarded' }, amount: 2 },
     ],
+    grid: buildGrid('observer'),
   },
 ];
+
+// 데이터를 늘릴 때 그리드 규칙(라인마다 0코스트 후보 하나, 계열 일치)을 깨면 즉시 터진다.
+for (const c of CHARACTERS) assertGridValid(c.grid);
 
 const BY_ID = new Map(CHARACTERS.map((c) => [c.id, c]));
 

@@ -15,6 +15,7 @@ export type CharacterId = string;
 export type SkillId = string;
 export type EnemyId = string;
 export type UpgradeId = string;
+export type GridLineId = string;
 export type NodeId = string;
 
 /** 강화와 자원의 두 계열. 역할 분리는 확정이다. */
@@ -128,22 +129,41 @@ export interface UpgradeDef {
   modifiers: Partial<CombatModifiers>;
 }
 
+/**
+ * 배분 그리드의 한 라인.
+ *
+ * design.md **확정**: SC2 캠페인 태양 핵과 완전히 같은 구조.
+ * - 같은 라인에서는 **하나만** 고를 수 있다
+ * - 각 라인에서 **아무것도 안 고를 수는 없다** (항상 정확히 하나가 활성)
+ *
+ * 위 규칙에서 따라 나오는 제약: 자원이 0일 때도 모든 라인이 채워져야 하므로
+ * **라인마다 0코스트 후보가 반드시 하나 있어야 한다.** `assertGridValid()`가 검사한다.
+ *
+ * 미정: 라인 수, 라인 이름, 라인당 후보 수와 코스트 티어.
+ */
+export interface GridLine {
+  id: GridLineId;
+  name: string;
+  polarity: Polarity;
+  /** 이 라인의 후보들. 전부 같은 계열이고, 하나는 반드시 cost 0이다. */
+  candidates: UpgradeId[];
+}
+
 export interface UpgradeState {
   /** 무작위 제시로 획득한 것 (확정: 런 중 획득, 런이 끝나면 사라짐) */
   granted: UpgradeId[];
   /**
-   * 자원 배분으로 켜 둔 것.
-   * 확정: 재배분(교체)이 자유롭고, 휴식 지점의 기회를 소모하지 않는다.
+   * 라인마다 지금 켜져 있는 강화. **모든 라인에 항상 하나씩 들어 있다.**
+   * 비울 수 없으므로 Record에서 키가 빠지는 일이 없다.
    *
-   * 미정: 원본 TRPG는 슬롯별 택1 그리드였다. 새 게임도 그 구조인지,
-   * 슬롯이 몇 개인지는 정해지지 않았다. 그래서 지금은 **구조 없는 집합**으로 둔다.
-   * 그리드가 확정되면 이 자리를 슬롯 배열로 바꾸면 된다.
+   * 확정: 재배분(교체)이 자유롭고, 휴식 지점의 기회를 소모하지 않는다.
+   * 미정: 재배분 제약(횟수/시점/비용).
    */
-  allocated: UpgradeId[];
+  allocated: Record<GridLineId, UpgradeId>;
   /**
    * 적립한 자원. 확정: 캐릭터마다 다르고, 런 한정이다.
    * 미정: 긍정/부정이 각각 별도 예산인지, 하나로 합쳐 쓰는지.
-   * 지금은 둘을 따로 세되 배분 시 해당 계열에서만 차감한다.
+   * 지금은 둘을 따로 세되 라인의 계열에서만 차감한다.
    */
   resources: PolarityCount;
 }
@@ -163,6 +183,8 @@ export interface CharacterDef {
   skillPool: SkillId[];
   /** 확정: 조건은 캐릭터마다 다르다. 구체 내용은 미정(플레이스홀더) */
   resourceRules: ResourceRule[];
+  /** 배분 그리드. 라인 수와 이름은 미정이라 플레이스홀더다. */
+  grid: GridLine[];
 }
 
 // ── 적 ──────────────────────────────────────────

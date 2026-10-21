@@ -5,9 +5,9 @@ import type { CombatState, GameState, MapNode, RunState, SkillId } from '../type
 import { CHARACTERS, getCharacter } from '../data/characters';
 import { getEnemy } from '../data/enemies';
 import { getSkill } from '../data/skills';
-import { getUpgrade, upgradesFor } from '../data/upgrades';
+import { getUpgrade } from '../data/upgrades';
 import { canUse, livingEnemies, mitigatedDamage, skillCost, unguardedDamage } from '../systems/combat';
-import { activeUpgrades, allocationRefusal, modifiersFor } from '../systems/upgrades';
+import { activeUpgrades, modifiersFor, selectionRefusal, swapCost } from '../systems/upgrades';
 
 /** 렌더링에만 쓰이는, 저장할 필요 없는 상태. */
 export interface UiState {
@@ -323,27 +323,42 @@ function restScreen(run: RunState): string {
 
 function allocateScreen(run: RunState): string {
   const r = run.upgrades.resources;
+  const grid = getCharacter(run.characterId).grid;
 
-  const rows = upgradesFor(run.characterId)
-    .map((u) => {
-      const on = run.upgrades.allocated.includes(u.id);
-      const granted = run.upgrades.granted.includes(u.id);
-      const refusal = allocationRefusal(run, u.id);
-      const label = u.polarity === 'positive' ? '긍정' : '부정';
+  const lines = grid
+    .map((line) => {
+      const label = line.polarity === 'positive' ? '긍정' : '부정';
+      const cards = line.candidates
+        .map((id) => {
+          const u = getUpgrade(id);
+          const on = run.upgrades.allocated[line.id] === id;
+          const refusal = selectionRefusal(run, line, id);
+          const diff = swapCost(run, line, id);
+          const note = on
+            ? '켜짐'
+            : refusal === 'insufficient'
+              ? `자원 ${diff} 필요`
+              : diff > 0
+                ? `자원 ${diff}`
+                : diff < 0
+                  ? `${-diff} 환급`
+                  : '교체 무료';
+          return `
+          <button class="pick ${on ? 'card--selected' : ''}"
+            data-action="selectInLine" data-line="${esc(line.id)}" data-id="${esc(id)}"
+            ${on || refusal === null ? '' : 'disabled'}>
+            <span class="pick__name">${esc(u.name)} · ${u.cost}</span>
+            <span class="pick__tagline">${esc(u.text)}</span>
+            <span class="pick__note">${note}</span>
+          </button>`;
+        })
+        .join('');
 
-      if (granted) {
-        return `
-        <button class="pick" disabled>
-          <span class="pick__name">${esc(u.name)} · ${label}</span>
-          <span class="pick__tagline">${esc(u.text)} · 이미 획득함</span>
-        </button>`;
-      }
       return `
-      <button class="pick ${on ? 'card--selected' : ''}" data-action="${on ? 'deallocate' : 'allocate'}" data-id="${esc(u.id)}"
-        ${on || refusal === null ? '' : 'disabled'}>
-        <span class="pick__name">${esc(u.name)} · ${label} ${u.cost}</span>
-        <span class="pick__tagline">${esc(u.text)}${on ? ' · 켜짐 (누르면 환급)' : refusal === 'insufficient' ? ' · 자원 부족' : ''}</span>
-      </button>`;
+      <div class="grid-line">
+        <h3 class="grid-line__name">${esc(line.name)} · ${label}</h3>
+        <div class="grid-line__row">${cards}</div>
+      </div>`;
     })
     .join('');
 
@@ -354,12 +369,12 @@ function allocateScreen(run: RunState): string {
       <div class="statuses">
         <span class="chip">긍정 ${r.positive}</span>
         <span class="chip">부정 ${r.negative}</span>
-        <span class="chip">재배분 자유 · 전액 환급</span>
+        <span class="chip">라인마다 하나 · 비울 수 없음</span>
+        <span class="chip">재배분 자유 · 차액만 오감</span>
       </div>
-      <div class="pick-row">${rows}</div>
+      ${lines}
       <p class="subtitle">
-        ⚠️ 배분 그리드의 구조(슬롯별 택1인지, 슬롯 수)는 design.md에서 미정이라
-        지금은 구조 없는 목록이다.
+        라인 수 · 이름 · 코스트 티어는 아직 미정이다. 구조(라인별 택1, 비울 수 없음)만 확정.
       </p>
       <button class="btn btn--primary" data-action="leaveAllocate">돌아가기</button>
     </section>`;

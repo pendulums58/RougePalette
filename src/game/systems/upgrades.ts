@@ -13,6 +13,8 @@
 
 import type {
   CharacterDef,
+  GridLine,
+  GridLineId,
   CombatEvent,
   CombatModifiers,
   PolarityCount,
@@ -20,7 +22,7 @@ import type {
   UpgradeId,
 } from '../types';
 import { emptyPolarityCount } from '../types';
-import { getUpgrade } from '../data/upgrades';
+import { assertGridValid, getUpgrade } from '../data/upgrades';
 import { OVERLOAD_PER_ACTION, UNGUARDED_MULT } from '../tuning';
 
 /**
@@ -37,9 +39,9 @@ export function baseModifiers(): CombatModifiers {
   };
 }
 
-/** 지금 효과가 걸려 있는 강화 = 무작위로 획득한 것 + 자원으로 켜 둔 것 */
+/** 지금 효과가 걸려 있는 강화 = 무작위로 획득한 것 + 그리드에서 켜 둔 것 */
 export function activeUpgrades(run: RunState): UpgradeId[] {
-  return [...run.upgrades.granted, ...run.upgrades.allocated];
+  return [...run.upgrades.granted, ...Object.values(run.upgrades.allocated)];
 }
 
 /** 활성 강화를 전부 합친 최종 전투 수치. */
@@ -61,53 +63,76 @@ export function modifiersFor(run: RunState): CombatModifiers {
 
 // ── 무작위 제시 경로 ────────────────────────────
 
-/** 이미 가지고 있어서 다시 제시할 필요가 없는 강화인가. */
-export function alreadyHas(run: RunState, id: UpgradeId): boolean {
-  return run.upgrades.granted.includes(id) || run.upgrades.allocated.includes(id);
-}
-
 export function grantUpgrade(run: RunState, id: UpgradeId): void {
-  if (alreadyHas(run, id)) return;
+  if (run.upgrades.granted.includes(id)) return;
   run.upgrades.granted.push(id);
 }
 
-// ── 자원 배분 경로 ──────────────────────────────
+// ── 자원 배분 경로 (그리드) ────────────────────
+//
+// design.md 확정: SC2 캠페인 태양 핵과 완전히 같은 구조.
+// - 같은 라인에서는 하나만 고를 수 있다
+// - 각 라인에서 아무것도 안 고를 수는 없다 -> 항상 정확히 하나가 활성
+// 따라서 "해제"라는 동작은 없다. 있는 것은 **같은 라인 안에서의 교체**뿐이다.
 
-export type AllocateRefusal = 'already' | 'granted' | 'insufficient';
+/** 라인의 기본값 = 그 라인의 0코스트 후보. 자원이 0이어도 그리드가 꽉 찬다. */
+function defaultOf(line: GridLine): UpgradeId {
+  const zero = line.candidates.find((id) => getUpgrade(id).cost === 0);
+  if (!zero) throw new Error(`grid line "${line.id}" has no 0-cost candidate`);
+  return zero;
+}
 
-/** 배분 가능한지. 안 되면 이유를 돌려준다. */
-export function allocationRefusal(run: RunState, id: UpgradeId): AllocateRefusal | null {
-  if (run.upgrades.allocated.includes(id)) return 'already';
-  if (run.upgrades.granted.includes(id)) return 'granted';
-  const def = getUpgrade(id);
-  if (run.upgrades.resources[def.polarity] < def.cost) return 'insufficient';
+/** 런 시작 시의 그리드 상태 — 모든 라인이 0코스트 후보로 채워져 있다. */
+export function newUpgradeState(grid: GridLine[]) {
+  assertGridValid(grid);
+  const allocated: Record<GridLineId, UpgradeId> = {};
+  for (const line of grid) allocated[line.id] = defaultOf(line);
+  return { granted: [] as UpgradeId[], allocated, resources: emptyPolarityCount() };
+}
+
+export type SelectRefusal =
+  /** 이미 이 라인에서 켜져 있다 */
+  | 'already'
+  /** 그 라인의 후보가 아니다 */
+  | 'notCandidate'
+  /** 자원이 모자란다 (교체 차액 기준) */
+  | 'insufficient';
+
+/**
+ * 교체에 드는 **차액**. 지금 켜진 것을 환급하고 새 것을 사는 값이다.
+ * 더 싼 것으로 내리면 음수가 되고, 그만큼 자원이 돌아온다.
+ */
+export function swapCost(run: RunState, line: GridLine, to: UpgradeId): number {
+  const current = run.upgrades.allocated[line.id];
+  const from = current ? getUpgrade(current).cost : 0;
+  return getUpgrade(to).cost - from;
+}
+
+export function selectionRefusal(run: RunState, line: GridLine, to: UpgradeId): SelectRefusal | null {
+  if (!line.candidates.includes(to)) return 'notCandidate';
+  if (run.upgrades.allocated[line.id] === to) return 'already';
+  if (run.upgrades.resources[line.polarity] < swapCost(run, line, to)) return 'insufficient';
   return null;
 }
 
-export function canAllocate(run: RunState, id: UpgradeId): boolean {
-  return allocationRefusal(run, id) === null;
-}
-
-/** 자원을 써서 강화를 켠다. */
-export function allocate(run: RunState, id: UpgradeId): boolean {
-  if (!canAllocate(run, id)) return false;
-  const def = getUpgrade(id);
-  run.upgrades.resources[def.polarity] -= def.cost;
-  run.upgrades.allocated.push(id);
-  return true;
+export function canSelect(run: RunState, line: GridLine, to: UpgradeId): boolean {
+  return selectionRefusal(run, line, to) === null;
 }
 
 /**
- * 켜 둔 강화를 끈다. 코스트는 **전액 환급**된다.
- * 확정: 재배분(교체)이 자유롭다. 제약(횟수/시점/비용)은 미정이라 걸지 않았다.
+ * 라인의 선택을 바꾼다. 재배분은 자유이고 차액만 오간다.
+ * 라인을 비우는 동작은 없다 — 확정 규칙상 불가능하다.
  */
-export function deallocate(run: RunState, id: UpgradeId): boolean {
-  const i = run.upgrades.allocated.indexOf(id);
-  if (i === -1) return false;
-  const def = getUpgrade(id);
-  run.upgrades.allocated.splice(i, 1);
-  run.upgrades.resources[def.polarity] += def.cost;
+export function selectInLine(run: RunState, line: GridLine, to: UpgradeId): boolean {
+  if (!canSelect(run, line, to)) return false;
+  run.upgrades.resources[line.polarity] -= swapCost(run, line, to);
+  run.upgrades.allocated[line.id] = to;
   return true;
+}
+
+/** 무작위 제시로 이미 받은 강화인가. */
+export function alreadyGranted(run: RunState, id: UpgradeId): boolean {
+  return run.upgrades.granted.includes(id);
 }
 
 // ── 자원 적립 ───────────────────────────────────
@@ -147,16 +172,10 @@ export function bankResources(run: RunState, earned: PolarityCount): void {
   run.upgrades.resources.negative += earned.negative;
 }
 
-export function newUpgradeState() {
-  return { granted: [], allocated: [], resources: emptyPolarityCount() };
-}
-
 // ── 미정이라 구현하지 않은 것 ───────────────────
 //
-// - **배분 그리드 구조.** 원본 TRPG는 영혼(슬롯)마다 융화체 셋 중 택1하는
-//   그리드였다. 새 게임도 그 구조인지, 슬롯이 몇 개인지 미정이라 지금은
-//   구조 없는 집합으로 뒀다. 그리드가 정해지면 UpgradeState.allocated를
-//   슬롯 배열로 바꾸고 여기 allocate()에 슬롯 규칙을 넣으면 된다.
+// - **라인 수와 이름, 라인당 후보 수, 코스트 티어.** 그리드가 라인 구조라는 것은
+//   확정이지만 이 네 가지는 미정이다. data/upgrades.ts의 buildGrid()가 그 자리다.
 // - **자원 풀이 둘인가.** 지금은 계열별로 따로 세고 해당 계열에서만 차감한다.
 //   하나로 합치는 쪽이면 resources를 단일 숫자로 바꾸면 된다.
 // - **재배분 제약** (횟수/시점/비용). 확정이 "자유"까지라 제약을 두지 않았다.

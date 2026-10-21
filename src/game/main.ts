@@ -15,7 +15,7 @@ import {
   startCombat,
   useAction,
 } from './systems/combat';
-import { allocate, bankResources, deallocate, grantUpgrade, modifiersFor } from './systems/upgrades';
+import { bankResources, grantUpgrade, modifiersFor, selectInLine } from './systems/upgrades';
 import { findNode, isLastFloor, rollSkillChoices, rollUpgradeChoices, startRun } from './systems/run';
 import { render, type UiState } from './ui/render';
 import { REST_HEAL_RATIO } from './tuning';
@@ -192,16 +192,13 @@ const actions: Record<string, (el: HTMLElement) => void> = {
     game = game.returnTo === 'rest' ? { screen: 'rest', run: game.run } : { screen: 'map', run: game.run };
   },
 
-  allocate(el) {
+  // 확정: 라인마다 하나만, 비울 수는 없다. 그래서 "해제"가 아니라 교체만 있다.
+  selectInLine(el) {
     if (game.screen !== 'allocate') return;
-    const id = el.dataset.id;
-    if (id) allocate(game.run, id);
-  },
-
-  deallocate(el) {
-    if (game.screen !== 'allocate') return;
-    const id = el.dataset.id;
-    if (id) deallocate(game.run, id);
+    const { line: lineId, id } = el.dataset;
+    if (!lineId || !id) return;
+    const line = getCharacter(game.run.characterId).grid.find((l) => l.id === lineId);
+    if (line) selectInLine(game.run, line, id);
   },
 
   restart() {

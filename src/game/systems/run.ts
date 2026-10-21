@@ -11,8 +11,8 @@
 
 import type { CharacterDef, MapNode, NodeKind, RunState, SkillId, UpgradeId } from '../types';
 import { Rng } from './rng';
-import { newUpgradeState, alreadyHas } from './upgrades';
-import { upgradesFor } from '../data/upgrades';
+import { newUpgradeState, alreadyGranted } from './upgrades';
+import { grantPool } from '../data/upgrades';
 import { FLOORS_BEFORE_BOSS, REST_INTERVAL, SKILL_CHOICES, UPGRADE_CHOICES } from '../tuning';
 
 const NORMAL_POOLS: string[][] = [['husk'], ['swarm', 'swarm'], ['husk', 'swarm']];
@@ -29,7 +29,7 @@ export function startRun(character: CharacterDef, seed: number): RunState {
     floors: generateFloors(rng),
     floorIndex: 0,
     currentNodeId: null,
-    upgrades: newUpgradeState(),
+    upgrades: newUpgradeState(character.grid),
   };
 }
 
@@ -81,11 +81,11 @@ export function rollSkillChoices(character: CharacterDef, rng: Rng): SkillId[] {
 
 /**
  * 전투 후 제시할 강화 후보 (확정: 무작위 제시 경로).
- * 이미 가진 것은 빼고 제시한다.
+ *
+ * 그리드 후보는 배분으로만 얻으므로 여기서 제외된다.
+ * 미정: 두 경로가 같은 풀을 써야 하는지. 지금은 분리해 뒀다.
  */
 export function rollUpgradeChoices(run: RunState, rng: Rng): UpgradeId[] {
-  const pool = upgradesFor(run.characterId)
-    .map((u) => u.id)
-    .filter((id) => !alreadyHas(run, id));
+  const pool = grantPool(run.characterId).filter((id) => !alreadyGranted(run, id));
   return rng.sample(pool, UPGRADE_CHOICES);
 }
