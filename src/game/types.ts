@@ -292,6 +292,14 @@ export interface RunState {
   maxHp: number;
   /** 보유 스킬 */
   skills: SkillId[];
+  /**
+   * 상점 화폐 (확정: 골드가 있다).
+   *
+   * 미정이라 비어 있는 것: **어떻게 버는지**(전투 보상인지 이벤트인지)와
+   * **무엇을 사는지**. 그래서 지금은 늘 0이다. 임의로 드랍을 만들지 말 것.
+   * 추가 화폐를 하나 더 둘지는 "미정 — 제작자 발의"다.
+   */
+  gold: number;
   map: GameMap;
   floorIndex: number;
   /** 마지막으로 들어간 노드. null이면 아직 시작 층을 고르지 않았다 */

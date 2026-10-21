@@ -24,6 +24,7 @@ export function startRun(character: CharacterDef, seed: number): RunState {
     hp: character.maxHp,
     maxHp: character.maxHp,
     skills: [...character.startingSkills],
+    gold: 0,
     map: generateMap(rng),
     floorIndex: 0,
     currentNodeId: null,

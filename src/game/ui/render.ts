@@ -44,9 +44,17 @@ export function render(game: GameState, ui: UiState): string {
     case 'rest':
       return restScreen(game.run);
     case 'shop':
-      return stubScreen(game.run, '상점', '무엇을 파는지, 화폐가 무엇인지 아직 정해지지 않았다.');
+      return stubScreen(
+        game.run,
+        '상점',
+        `화폐가 골드라는 것은 확정이지만, 재고가 무엇인지와 골드를 어떻게 버는지는 아직 정해지지 않았다. (보유 ${game.run.gold} 골드)`,
+      );
     case 'event':
-      return stubScreen(game.run, '이벤트', '어떤 조우가 나올지 아직 정해지지 않았다.');
+      return stubScreen(
+        game.run,
+        '이벤트',
+        '텍스트 조우로 만드는 쪽으로 기울어 있으나 확정이 아니다. 내용과 선택지는 정해지지 않았다.',
+      );
     case 'allocate':
       return allocateScreen(game.run);
     case 'gameOver':
@@ -64,6 +72,7 @@ function runHeader(run: RunState): string {
       <span>${esc(c.name)}</span>
       <span>체력 ${run.hp} / ${run.maxHp}</span>
       <span>노트 ${c.notes + modifiersFor(run).notes}</span>
+      <span>골드 ${run.gold}</span>
       <span>긍정 ${r.positive} · 부정 ${r.negative}</span>
     </header>`;
 }
