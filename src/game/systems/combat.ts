@@ -28,7 +28,8 @@ import type {
 import { emptyPolarityCount } from '../types';
 import { getEnemy } from '../data/enemies';
 import { getCharacter } from '../data/characters';
-import { awardResources, modifiersFor } from './upgrades';
+import { awardResources } from './upgrades';
+import { modifiersFor } from './modifiers';
 import { fire } from './hooks';
 
 /**

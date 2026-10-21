@@ -62,6 +62,27 @@ const UPGRADES: UpgradeDef[] = [
   { id: 'drop_bracer', name: '낡은 완갑', polarity: 'positive', cost: 0, text: '방어 경감 +4.', modifiers: { mitigation: 4 } },
   { id: 'drop_breath', name: '두 번째 숨', polarity: 'positive', cost: 0, text: '사이클당 턴 노트 +1.', modifiers: { notes: 1 } },
   { id: 'drop_gamble', name: '깨진 저울', polarity: 'negative', cost: 0, text: '피해 +7. 무방비로 받는 피해가 늘어난다.', modifiers: { damage: 7, unguardedMult: 0.4 } },
+  // 곱하기 기여를 쓰는 예. 더하기와 달리 **순서에 따라 결과가 달라진다.**
+  {
+    id: 'drop_doubling',
+    name: '겹쳐진 날',
+    polarity: 'negative',
+    cost: 0,
+    text: '행동 스킬 피해가 2배가 된다. 무방비로 받는 피해도 늘어난다.',
+    modifiers: { unguardedMult: 0.4 },
+    multipliers: { damage: 2 },
+  },
+  // 메타 효과를 쓰는 예. 다른 효과(포션)의 기여를 건드린다.
+  // 납작한 합이었다면 "어떤 기여가 포션에서 왔는지"가 사라져서 불가능했다.
+  {
+    id: 'drop_alchemy',
+    name: '연금술사의 손',
+    polarity: 'positive',
+    cost: 0,
+    text: '포션의 효과가 2배가 된다.',
+    modifiers: {},
+    meta: [{ kind: 'scaleSource', from: 'potion', factor: 2 }],
+  },
   // 훅(반응)을 쓰는 예. 적을 쓰러뜨릴 때 반응하므로 값 질의로는 표현할 수 없다.
   {
     id: 'drop_backdraft',
@@ -94,7 +115,8 @@ const WORSE_WHEN: Record<keyof CombatModifiers, 'negative' | 'positive'> = {
 export const Upgrades = defineRegistry('강화', UPGRADES, (u) => {
   if (u.cost < 0) return 'cost는 0 이상이어야 한다';
   const keys = Object.keys(u.modifiers) as Array<keyof CombatModifiers>;
-  if (keys.length === 0 && !u.hooks) return 'modifiers도 hooks도 없다 — 아무 효과도 없는 강화';
+  if (keys.length === 0 && !u.hooks && !u.multipliers && !u.meta)
+    return 'modifiers / multipliers / meta / hooks 중 아무것도 없다 — 효과가 없는 강화';
 
   // 확정: 긍정 = 순수 메리트. 디메리트가 섞이면 안 된다.
   if (u.polarity === 'positive') {

@@ -10,7 +10,8 @@ import { getPotion } from '../data/potions';
 import { stacked } from '../systems/potions';
 import { getUpgrade } from '../data/upgrades';
 import { canUse, livingEnemies, mitigatedDamage, skillCost, unguardedDamage } from '../systems/combat';
-import { activeUpgrades, modifiersFor, selectionRefusal, swapCost } from '../systems/upgrades';
+import { activeUpgrades, selectionRefusal, swapCost } from '../systems/upgrades';
+import { modifiersFor } from '../systems/modifiers';
 
 /** 렌더링에만 쓰이는, 저장할 필요 없는 상태. */
 export interface UiState {

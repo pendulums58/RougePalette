@@ -127,7 +127,12 @@ export interface UpgradeDef {
   /** 자원 배분으로 켤 때 드는 코스트. 0이면 자원 없이도 켤 수 있다 */
   cost: number;
   text: string;
+  /** 더하는 기여 (op: 'add'). 가장 흔한 형태라 이게 기본이다 */
   modifiers: Partial<CombatModifiers>;
+  /** 곱하는 기여 (op: 'mul'). 순서에 따라 결과가 달라진다 */
+  multipliers?: Partial<Record<ModKey, number>>;
+  /** 다른 효과의 기여를 건드린다 (예: 포션 효과 2배) */
+  meta?: MetaOp[];
   /** 값 질의로 표현할 수 없는 반응. 없으면 생략한다 */
   hooks?: EffectHooks;
 }
@@ -170,6 +175,44 @@ export interface UpgradeState {
    */
   resources: PolarityCount;
 }
+
+// ── 값 효과 파이프라인 ──────────────────────────
+//
+// 값 효과는 **납작한 합이 아니다.** 출처가 붙은 기여를 모아 순서대로 접는다.
+// 그래야 두 가지가 가능해진다:
+//
+//   1. **순서 의존** — "노트 +1" 다음에 "노트 2배"면 (기본+1)x2,
+//      반대 순서면 기본x2+1. 획득 순서가 곧 적용 순서다
+//   2. **메타 효과** — "포션의 효과가 2배". 합으로 접어버리면 어떤 기여가
+//      포션에서 왔는지 사라져서 표현할 수 없다
+
+export type ModKey = keyof CombatModifiers;
+
+/** 기여가 어디서 왔는가. 메타 효과가 이걸 보고 고른다. */
+export type SourceKind = 'upgrade' | 'potion';
+
+/** 값 효과 기여 하나. */
+export interface Contribution {
+  from: SourceKind;
+  id: string;
+  /** 로그에 보여줄 이름 */
+  name: string;
+  key: ModKey;
+  op: 'add' | 'mul';
+  value: number;
+}
+
+/**
+ * 다른 효과의 기여를 건드리는 메타 효과.
+ *
+ * 무엇이든 할 수 있게 두면 추적이 불가능해지므로 **종류를 한정한다.**
+ * 새 종류가 필요하면 여기 한 줄 늘리고 applyMeta에 케이스 하나 추가한다.
+ */
+export type MetaOp =
+  /** 특정 출처에서 온 기여를 factor배 (예: 포션 효과 2배) */
+  | { kind: 'scaleSource'; from: SourceKind; factor: number }
+  /** 특정 수치에 대한 기여를 전부 factor배 (예: 피해 보정 2배) */
+  | { kind: 'scaleKey'; key: ModKey; factor: number };
 
 // ── 효과 훅 ─────────────────────────────────────
 //
@@ -252,6 +295,10 @@ export interface PotionDef {
   price: number;
   /** 전투 시작 시 더해지는 값. 스택되면 개수만큼 더해진다 */
   modifiers: Partial<CombatModifiers>;
+  /** 곱하는 기여. 스택되면 그만큼 거듭 곱해진다 */
+  multipliers?: Partial<Record<ModKey, number>>;
+  /** 다른 효과의 기여를 건드린다 */
+  meta?: MetaOp[];
   /** 값 질의로 표현할 수 없는 반응. 스택된 개수만큼 발화한다 */
   hooks?: EffectHooks;
 }

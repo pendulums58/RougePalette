@@ -13,62 +13,22 @@
 
 import type {
   CharacterDef,
+  CombatEvent,
   GridLine,
   GridLineId,
-  CombatEvent,
-  CombatModifiers,
   PolarityCount,
   RunState,
   UpgradeId,
 } from '../types';
 import { emptyPolarityCount } from '../types';
 import { assertGridValid, getUpgrade } from '../data/upgrades';
-import { OVERLOAD_PER_ACTION, UNGUARDED_MULT } from '../tuning';
-import { potionModifiers } from './potions';
 
-/**
- * 강화가 하나도 없을 때의 전투 수치.
- * 강화의 modifiers는 여기에 **더해지는 값**이다 (절대값이 아니라 증감).
- */
-export function baseModifiers(): CombatModifiers {
-  return {
-    notes: 0,
-    overloadPerAction: OVERLOAD_PER_ACTION,
-    unguardedMult: UNGUARDED_MULT,
-    damage: 0,
-    mitigation: 0,
-  };
-}
+// 값 효과(baseModifiers / modifiersFor)는 systems/modifiers.ts로 옮겼다.
+// 거기는 출처가 붙은 순서 있는 파이프라인이고, 여기는 강화의 획득·배분만 다룬다.
 
 /** 지금 효과가 걸려 있는 강화 = 무작위로 획득한 것 + 그리드에서 켜 둔 것 */
 export function activeUpgrades(run: RunState): UpgradeId[] {
   return [...run.upgrades.granted, ...Object.values(run.upgrades.allocated)];
-}
-
-/**
- * 지금 전투에 적용되는 최종 수치 = 기본 + 활성 강화 + 지속 중인 포션.
- * 포션은 design.md 확정대로 **전투 시작 시** 이 값으로 들어간다.
- */
-export function modifiersFor(run: RunState): CombatModifiers {
-  const m = baseModifiers();
-  for (const id of activeUpgrades(run)) {
-    const def = getUpgrade(id);
-    m.notes += def.modifiers.notes ?? 0;
-    m.overloadPerAction += def.modifiers.overloadPerAction ?? 0;
-    m.unguardedMult += def.modifiers.unguardedMult ?? 0;
-    m.damage += def.modifiers.damage ?? 0;
-    m.mitigation += def.modifiers.mitigation ?? 0;
-  }
-  const potion = potionModifiers(run);
-  m.notes += potion.notes ?? 0;
-  m.overloadPerAction += potion.overloadPerAction ?? 0;
-  m.unguardedMult += potion.unguardedMult ?? 0;
-  m.damage += potion.damage ?? 0;
-  m.mitigation += potion.mitigation ?? 0;
-  // 과부하 증가량이 음수가 되면 규칙이 무너진다. 0 미만으로는 내려가지 않게 한다.
-  m.overloadPerAction = Math.max(0, m.overloadPerAction);
-  m.unguardedMult = Math.max(1, m.unguardedMult); // 무방비가 방어보다 유리해지지 않게
-  return m;
 }
 
 // ── 무작위 제시 경로 ────────────────────────────
