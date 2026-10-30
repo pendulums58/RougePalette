@@ -271,7 +271,7 @@ explain(run, 'damage')
 
 - **`CombatState.stacks`는 그릇만 있다.** 어떤 상태이상이 있는지는 **설계 결정**이고
   `design.md`에 한 줄도 없다. 임의로 채우지 말 것.
-- **역공이 확정되면 훅 지점을 다시 봐야 한다.** 사이클 구조 자체가 바뀐다.
+- 역공은 확정되어 구현됐다. 흐름이 바뀌었으므로 훅 지점을 늘릴 때는 역공 경로도 같이 볼 것.
 - 각 층을 쓰는 콘텐츠는 인프라가 도는지 보여주려고 넣은 플레이스홀더뿐이다:
   **겹쳐진 날**(곱하기) · **연금술사의 손**(메타) · **역류**(반응) ·
   **메아리 물약**(반응+스택) · **첫 수**(규칙 개변) · **쟁이는 버릇**(규칙 개변).
@@ -286,7 +286,8 @@ explain(run, 'damage')
   - 알려진 대가: 성능이 아니라 **네이티브 상태 손실**이다. 매 클릭마다 포커스가 날아가고(`:focus` 스타일도 없어 키보드 조작이 사실상 불가), `<details>` 열린 상태와 스크롤 위치가 초기화된다. 보존이 필요하면 `UiState`로 올린다.
 - **이벤트는 위임만.** `#app`에 걸린 단일 클릭 핸들러가 `data-action` 속성을 읽어 `main.ts`의 `actions` 맵에서 함수를 찾는다. 개별 요소에 리스너를 붙이지 말 것.
 - **로직은 UI를 모른다.** `systems/`는 DOM을 건드리지 않는다. 테스트 가능해야 한다.
-  - 현재 테스트는 0개다. 전투를 교체할 때 안전망이 없다.
+  - 검증 스위트는 `verify/`에 있다. `npm run verify` (또는 빌드까지 같이 `npm run check`).
+    러너를 들이지 않고 그냥 스크립트로 두었다 — 실패하면 got/want가 바로 보인다.
 - **난수는 전부 `Rng` 인스턴스로.** `Math.random()`을 직접 쓰지 말 것 — 시드 재현이 깨진다. (예외: `randomSeed()` 하나)
   - `design.md` 확정: **무작위성은 런 레이어에만 있다.** 전투 내부에는 무작위 요소가 없다.
 
@@ -342,7 +343,9 @@ explain(run, 'damage')
 | 적의 턴 노트와 방어 | 없음 (적은 공격만) | `systems/combat.ts` |
 | 안티스톨 | 없음 | `systems/combat.ts`의 `endCycle()` |
 | 방어 스킬 사전 세팅 | 매번 전체에서 선택 | `ui/render.ts`의 `defendView()` |
-| 역공 / 다이스 / 속성 | 없음 | — |
+| ~~역공을 쓸 것인가~~ → **확정됨** | 판정·흐름 구현됨. 조건은 비어 있음 | — |
+| 역공 조건의 소재지·내용·중첩 | 파수꾼 예시 하나뿐 | `data/enemies.ts` 등 `counter?:` |
+| 다이스 / 속성 | 없음 | — |
 | 휴식 지점의 다른 선택지 | HP 회복만 | `ui/render.ts`의 `restScreen()` |
 | 강화 효과의 종류 | 값 질의 + 반응 훅 둘 다 가능 | `types.ts`의 `CombatModifiers` / `EffectHooks` |
 | 상태이상 (stacks의 내용물) | 그릇만 있고 비어 있음 | `types.ts`의 `CombatState.stacks` |
@@ -370,9 +373,14 @@ explain(run, 'damage')
 npm run dev        로컬 개발 서버
 npm run build      타입체크 + 프로덕션 빌드 (dist/)
 npm run typecheck  타입체크만
+npm run verify     규칙 검증 스위트 (verify/)
+npm run verify -- counter   이름이 맞는 스위트만
+npm run check      build + verify
 ```
 
-`npm run build`가 통과하지 않으면 커밋하지 말 것. CI가 똑같은 걸 돌린다.
+**`npm run check`가 통과하지 않으면 커밋하지 말 것.** CI는 build만 돌린다.
+
+처음 보는 사람은 `HANDOVER.md`부터 읽을 것.
 
 ## 배포
 
